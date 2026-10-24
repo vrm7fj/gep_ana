@@ -53,5 +53,6 @@
     "h_dphi_lims"          : [100, -0.15, 0.15],
     "h_Q2_lims"            : [100, 8, 16],
 
-    "save_pdf"             : true
+    "save_pdf"             : true,
+    "print_every"          : 200000
 }

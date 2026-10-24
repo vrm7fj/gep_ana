@@ -1,0 +1,60 @@
+{
+    "_README" : [
+        "GEP5 production runs 5951-5969 (Aug-2026 full replay, August19 pass).",
+        "The elastic selection is the global_cut (evaluated for array instance 0, i.e. the first",
+        "SBS/FT/FPP track). The macro's own elastic cuts below are opened up so they do not cut",
+        "on top of it; the FPP theta/zclose/sclose cuts still apply to the FPP track the macro picks.",
+        "rootfile_dir is the ifarm cache path (all 10 runs ~470 GB): run there, or change it to a",
+        "local folder holding the files. helicity_sign / IHWP per run and beam_polarization are",
+        "placeholders until checked."
+    ],
+
+    "kinematic"            : "GEP5",
+    "ebeam"                : 10.66,
+    "sbs_theta_deg"        : 17.8,
+    "ecal_theta_deg"       : 28.5,
+    "ecal_dist"            : 0.0,
+    "sbs_bend_angle_deg"   : 0.0,
+    "beam_polarization"    : 0.85,
+
+    "rootfile_dir"         : "/lustre24/expphy/cache/halla/sbs/prod/GEP_REPLAYS/puckett/August19",
+    "file_pattern"         : "gep5_fullreplay_%d_*.root",
+    "runnums"              : [5951, 5952, 5953, 5954, 5956, 5959, 5961, 5965, 5968, 5969],
+    "Nruns_to_ana"         : -1,
+    "max_files_per_run"    : -1,
+
+    "global_cut"           : "sqrt(pow((heep.dxECAL-0.01+0.025*earm.ecal.x)/0.0125,2)+pow((heep.dyECAL-(0.0019+0.00365*earm.ecal.x+0.0171*pow(earm.ecal.x,2)+0.01448*pow(earm.ecal.x,3)))/0.0157,2))<=3.5&&abs(heep.dt_ADC-0.5)<9&&abs(heep.dpp-0.0164)<0.04&&sbs.gemFPP.track.sclose<0.005&&abs(sbs.tr.vz+0.1)<0.175&&(sbs.gemFT.track.nhits>4||sbs.gemFT.track.ngoodhits>2)&&sqrt(pow((sbs.gemFPP.track.y+sbs.gemFPP.track.yp*6.7-sbs.hcal.y+0.0132)/0.0425,2)+pow((sbs.gemFPP.track.x+sbs.gemFPP.track.xp*6.7-sbs.hcal.x-0.192)/0.0497,2))<=3.5&&sbs.gemFPP.track.ngoodhits>1&&earm.ecal.nblk>2&&sbs.hcal.nblk>1",
+    "extra_branches_for_global_cut" : [
+        "heep.*", "earm.ecal.*", "sbs.tr.*", "Ndata.sbs.tr.*",
+        "sbs.gemFT.track.*", "Ndata.sbs.gemFT.track.*",
+        "sbs.gemFPP.track.*", "Ndata.sbs.gemFPP.track.*",
+        "sbs.hcal.x", "sbs.hcal.y", "sbs.hcal.nblk"
+    ],
+
+    "dpp_cut"              : [-1.0, 1.0],
+    "dx_ecal"              : [0.0, 10.0],
+    "dy_ecal"              : [0.0, 10.0],
+    "Nsigma_cut_dx_ecal"   : 1,
+    "Nsigma_cut_dy_ecal"   : 1,
+    "dphi_cut"             : [-1.0, 1.0],
+    "use_dphi_in_elastic_cut" : false,
+    "ecal_active_area"     : [-10.0, 10.0, -10.0, 10.0],
+    "ecal_fiducial_margin" : [0.0, 0.0],
+
+    "theta_fpp_cut_deg"    : [3.0, 20.0],
+    "zclose_cut"           : [0.2, 2.8],
+    "sclose_max"           : 0.005,
+    "theta_fpp_bins_deg"   : [3, 5, 7, 9, 12, 15, 20],
+    "n_phi_bins"           : 24,
+
+    "helicity_sign"        : 1,
+    "helicity_sign_by_run" : {},
+
+    "h_dpp_lims"           : [100, -0.1, 0.1],
+    "h_dx_ecal_lims"       : [100, -0.15, 0.15],
+    "h_dy_ecal_lims"       : [100, -0.15, 0.15],
+    "h_dphi_lims"          : [100, -0.1, 0.1],
+    "h_Q2_lims"            : [100, 8, 16],
+
+    "save_pdf"             : true
+}

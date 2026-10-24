@@ -19,8 +19,11 @@
      root -l -b -q 'scripts/gep_elastic_ana.cpp("config/gep5/conf_gep5_5969.json","out/gep5")'
 */
 #include <map>
+#include <chrono>
 #include <vector>
 #include <iostream>
+
+#include "TSystem.h"
 
 #include "TCut.h"
 #include "TH1F.h"
@@ -225,10 +228,27 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "out/gep_
   // ================================================================
   // 4. Event loop
   // ================================================================
+  std::cout << "Counting entries in " << C->GetNtrees() << " files..." << std::endl;
   long nevent = 0, nevents = C->GetEntries(), npass = 0, nelas = 0, nfppok = 0;
+  std::cout << nevents << " events to process." << std::endl;
   int treenum = 0, currenttreenum = 0;
+
+  // progress: one line every print_every events (plain lines, so it works in batch / log files)
+  long print_every = jmgr->GetValueFromKey<long>("print_every", 200000);
+  auto t_start = std::chrono::steady_clock::now();
+  auto print_progress = [&](long n) {
+    double el = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_start).count();
+    double frac = nevents > 0 ? double(n) / nevents : 0.;
+    double eta = frac > 0 ? el * (1. - frac) / frac : 0.;
+    TString fname = C->GetCurrentFile() ? gSystem->BaseName(C->GetCurrentFile()->GetName()) : "";
+    printf("[%5.1f%%] %ld/%ld events | file %d/%d %s | passed %ld, elastic %ld, FPP ok %ld | %.0f s, ETA %.0f s\n",
+           100. * frac, n, nevents, C->GetTreeNumber() + 1, C->GetNtrees(), fname.Data(),
+           npass, nelas, nfppok, el, eta);
+    fflush(stdout);
+  };
+
   while (C->GetEntry(nevent++)) {
-    if (nevent % 10000 == 0) { std::cout << nevent << "/" << nevents << "\r"; std::cout.flush(); }
+    if (nevent % print_every == 0) print_progress(nevent);
 
     // ---- global cut (refresh formula leaves when the chain moves to a new file)
     currenttreenum = C->GetTreeNumber();
@@ -306,8 +326,8 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "out/gep_
     T_thfpp = thfpp; T_phfpp = phfpp; T_sclose = sclose; T_zclose = zclose; T_chi2fpp = chi2fpp;
     Tout->Fill();
   }
-  std::cout << std::endl
-            << nevents << " events read, " << npass << " passed the global cut, "
+  print_progress(nevents);
+  std::cout << nevents << " events read, " << npass << " passed the global cut, "
             << nelas << " elastic, " << nfppok << " elastic with a good FPP scattering." << std::endl;
 
   // ================================================================
