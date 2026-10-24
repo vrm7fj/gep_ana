@@ -1,0 +1,57 @@
+{
+    "_README" : [
+        "GEP5, run 5969 (Aug-2026 full replay). Cut values are FIRST GUESSES from 4 segments",
+        "(~2400 heep-valid events): refine them on the full run before trusting anything.",
+        "heep.* elastic variables come from the replay; the replay already pre-selects",
+        "elastic candidates (heep.datavalid), so dpp_cut below is wide open.",
+        "dx_ecal/dy_ecal = {mean, sigma} (m); *_lims = {nbins, min, max};",
+        "ecal_active_area = {xmin, xmax, ymin, ymax} (m) from the ECAL cluster x/y range.",
+        "helicity_sign: IHWP state of 5969 NOT checked -- set it (and per-run overrides) before",
+        "interpreting any asymmetry sign. beam_polarization is a placeholder.",
+        "Set max_files_per_run to e.g. 5 for a quick test, -1 for all segments."
+    ],
+
+    "kinematic"            : "GEP5_5969",
+    "ebeam"                : 10.66,
+    "sbs_theta_deg"        : 17.8,
+    "ecal_theta_deg"       : 28.5,
+    "ecal_dist"            : 0.0,
+    "sbs_bend_angle_deg"   : 0.0,
+    "beam_polarization"    : 0.85,
+
+    "rootfile_dir"         : "/home/vrm7fj/Downloads/gep5_5969",
+    "file_pattern"         : "gep5_fullreplay_%d_*.root",
+    "runnums"              : [5969],
+    "Nruns_to_ana"         : -1,
+    "max_files_per_run"    : -1,
+
+    "global_cut"           : "heep.datavalid==1&&sbs.tr.n>=1&&scalhel.errcode==0",
+    "extra_branches_for_global_cut" : [],
+
+    "dpp_cut"              : [-0.10, 0.13],
+    "dx_ecal"              : [0.03, 0.05],
+    "dy_ecal"              : [0.00, 0.10],
+    "Nsigma_cut_dx_ecal"   : 2,
+    "Nsigma_cut_dy_ecal"   : 2,
+    "dphi_cut"             : [-0.05, 0.05],
+    "use_dphi_in_elastic_cut" : true,
+    "ecal_active_area"     : [-1.46, 1.30, -0.60, 0.56],
+    "ecal_fiducial_margin" : [0.04, 0.04],
+
+    "theta_fpp_cut_deg"    : [3.0, 20.0],
+    "zclose_cut"           : [0.2, 2.8],
+    "sclose_max"           : 0.03,
+    "theta_fpp_bins_deg"   : [3, 5, 7, 9, 12, 15, 20],
+    "n_phi_bins"           : 24,
+
+    "helicity_sign"        : 1,
+    "helicity_sign_by_run" : {},
+
+    "h_dpp_lims"           : [100, -0.15, 0.15],
+    "h_dx_ecal_lims"       : [100, -0.3, 0.3],
+    "h_dy_ecal_lims"       : [100, -0.3, 0.3],
+    "h_dphi_lims"          : [100, -0.15, 0.15],
+    "h_Q2_lims"            : [100, 8, 16],
+
+    "save_pdf"             : true
+}

@@ -1,0 +1,60 @@
+{
+    "_README" : [
+        "Example config for scripts/gep_elastic_ana.cpp. ALL NUMBERS ARE PLACEHOLDERS:",
+        "fill in the real kinematics, cut values and paths for your setting.",
+        "Branch prefixes (br_*) must match your GEp replay tree; check with T->Print().",
+        "dx_ecal/dy_ecal = {peak mean, peak sigma} (m); *_lims = {nbins, min, max};",
+        "ecal_active_area = {xmin, xmax, ymin, ymax} (m) in ECAL coords (x vertical, down);",
+        "helicity_sign_by_run overrides helicity_sign for listed runs (IHWP state)."
+    ],
+
+    "kinematic"            : "GEP1",
+    "ebeam"                : 6.0,
+    "sbs_theta_deg"        : 15.0,
+    "ecal_theta_deg"       : 30.0,
+    "ecal_dist"            : 6.0,
+    "ecal_voffset"         : 0.0,
+    "ecal_hoffset"         : 0.0,
+    "sbs_field"            : 100,
+    "sbs_bend_angle_deg"   : 5.0,
+    "beam_polarization"    : 0.85,
+
+    "rootfile_dir"         : "/path/to/gep/replay/rootfiles",
+    "runnums"              : [1000, 1001],
+    "Nruns_to_ana"         : -1,
+
+    "global_cut"           : "sbs.tr.n>=1&&abs(sbs.tr.vz[0])<0.08&&earm.ecal.e>1.0",
+
+    "br_proton_track"      : "sbs.tr",
+    "br_front_gem"         : "sbs.gemFT.track",
+    "br_fpp_gem"           : "sbs.gemFPP.track",
+    "br_ecal"              : "earm.ecal",
+    "br_helicity"          : "scalhel.hel",
+    "br_runnum"            : "g.runnum",
+
+    "dpp_cut"              : [-0.03, 0.03],
+    "dx_ecal"              : [0.0, 0.03],
+    "dy_ecal"              : [0.0, 0.03],
+    "Nsigma_cut_dx_ecal"   : 3,
+    "Nsigma_cut_dy_ecal"   : 3,
+    "dphi_cut"             : [-0.05, 0.05],
+    "ecal_active_area"     : [-1.5, 1.5, -0.6, 0.6],
+    "ecal_fiducial_margin" : [0.05, 0.05],
+
+    "z_front_tracker"      : 0.0,
+    "z_fpp_tracker"        : 2.0,
+    "theta_fpp_cut_deg"    : [3.0, 25.0],
+    "zclose_cut"           : [0.5, 1.5],
+    "sclose_max"           : 0.01,
+    "theta_fpp_bins_deg"   : [3, 6, 9, 12, 15, 20, 25],
+    "n_phi_bins"           : 24,
+
+    "helicity_sign"        : 1,
+    "helicity_sign_by_run" : { "1001" : -1 },
+
+    "h_dpp_lims"           : [200, -0.2, 0.2],
+    "h_dx_ecal_lims"       : [200, -0.3, 0.3],
+    "h_dy_ecal_lims"       : [200, -0.3, 0.3],
+    "h_dphi_lims"          : [200, -0.3, 0.3],
+    "h_Q2_lims"            : [200, 0, 15]
+}
