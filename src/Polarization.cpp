@@ -35,9 +35,37 @@ namespace pol {
     }
   }
   //--------------------------------------------
-  void FPPPhiHistos::Write() const {
+  void FPPPhiHistos::Finalize() {
+    if (!fHs.empty()) return;                      // already built
+    for (size_t i = 0; i < fHp.size(); i++) {
+      TString base = TString(fHp[i]->GetName());
+      base.ReplaceAll("_hp", "");                  // h_phi_fpp_th0_hp -> h_phi_fpp_th0
+      TString rng = Form("%.1f < #theta_{fpp} < %.1f deg",
+                         fEdges[i] * TMath::RadToDeg(), fEdges[i + 1] * TMath::RadToDeg());
+
+      TH1D *hs = (TH1D*)fHp[i]->Clone(base + "_sum");
+      hs->Add(fHm[i]);
+      hs->SetTitle("N^{+} + N^{-}, " + rng + ";#phi_{fpp} (rad);counts");
+      fHs.push_back(hs);
+
+      TH1D *hd = (TH1D*)fHp[i]->Clone(base + "_diff");
+      hd->Add(fHm[i], -1.);
+      hd->SetTitle("N^{+} - N^{-}, " + rng + ";#phi_{fpp} (rad);counts");
+      fHd.push_back(hd);
+
+      TH1D *hdos = (TH1D*)fHp[i]->GetAsymmetry(fHm[i]);   // (N+ - N-)/(N+ + N-)
+      hdos->SetName(base + "_asym");
+      hdos->SetTitle("(N^{+} - N^{-})/(N^{+} + N^{-}), " + rng + ";#phi_{fpp} (rad);asymmetry");
+      fHdos.push_back(hdos);
+    }
+  }
+  //--------------------------------------------
+  void FPPPhiHistos::Write() {
     for (auto *h : fHp) h->Write();
     for (auto *h : fHm) h->Write();
+    for (auto *h : fHs) h->Write();
+    for (auto *h : fHd) h->Write();
+    for (auto *h : fHdos) h->Write();
   }
 
   /* ##################################################################

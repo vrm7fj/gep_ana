@@ -37,7 +37,7 @@
 
 #include "../include/gep-ana.h"
 
-int gep_elastic_ana(const char *configfilename, std::string filebase = "out/gep_elastic_ana")
+int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_out")
 {
   gErrorIgnoreLevel = kError;
   TStopwatch *sw = new TStopwatch(); sw->Start();
@@ -166,15 +166,27 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "out/gep_
                               100, ecal_area[2] - 0.2, ecal_area[3] + 0.2, 100, ecal_area[0] - 0.2, ecal_area[1] + 0.2);
   TH1F *h_thfpp    = new TH1F("h_theta_fpp", ";#theta_{fpp} (deg);", 200, 0, 25);
   TH1F *h_phfpp    = new TH1F("h_phi_fpp",   ";#phi_{fpp} (rad);", 72, -constant::pi, constant::pi);
+  TH1D *h_phfpp_hp = new TH1D("h_phi_fpp_hp", "h = +1;#phi_{fpp} (rad);counts", 24, -constant::pi, constant::pi);
+  TH1D *h_phfpp_hm = new TH1D("h_phi_fpp_hm", "h = -1;#phi_{fpp} (rad);counts", 24, -constant::pi, constant::pi);
+  // TH1D *h_phfpp_hdiff_all = new TH1D("h_phi_fpp_hdiff_all", "N_{+} - N_{-};#phi_{fpp} (rad);counts", 24, -constant::pi, constant::pi);
+  // TH1D *h_phfpp_hsum_all = new TH1D("h_phi_fpp_hsum_all", "N_{+} + N_{-};#phi_{fpp} (rad);counts", 24, -constant::pi, constant::pi);
+  // TH1D *h_phfpp_hasym_all = new TH1D("h_phi_fpp_hasym_all", "(N_{+} - N_{-})/(N_{+} + N_{-});#phi_{fpp} (rad);counts", 24, -constant::pi, constant::pi);
   TH1F *h_zclose   = new TH1F("h_zclose",    ";z_{close} (m);", 200, -1, 5);
   TH1F *h_sclose   = new TH1F("h_sclose",    ";s_{close} (m);", 200, 0, 0.1);
   TH1F *h_hel      = new TH1F("h_helicity",  ";helicity;", 3, -1.5, 1.5);
+
+  //error for sum/difference
+  h_phfpp_hp->Sumw2();
+  h_phfpp_hm->Sumw2();
 
   // phi_fpp per helicity and theta_fpp bin -> input to the polarization stage
   std::vector<double> th_bins; jmgr->GetVectorFromKey<double>("theta_fpp_bins_deg", th_bins);
   for (auto &v : th_bins) v *= constant::deg2rad;
   pol::FPPPhiHistos fppPhi;
   fppPhi.Book("h_phi_fpp", jmgr->GetValueFromKey<int>("n_phi_bins", 24), th_bins);
+
+  pol::FPPPhiHistos fppPhiAll;
+  fppPhiAll.Book("h_phi_fpp_all", jmgr->GetValueFromKey<int>("n_phi_bins", 24), {thfpp_cut[0], thfpp_cut[1]});
 
   TTree *Tout = new TTree("Tout", "GEp elastic events");
   bool dppCut, ecalCut, dphiCut, fiduCut, elasticCut, fppCut;
@@ -228,9 +240,8 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "out/gep_
   // ================================================================
   // 4. Event loop
   // ================================================================
-  std::cout << "Counting entries in " << C->GetNtrees() << " files..." << std::endl;
-  long nevent = 0, nevents = C->GetEntries(), npass = 0, nelas = 0, nfppok = 0;
-  std::cout << nevents << " events to process." << std::endl;
+  long nevent = 0, npass = 0, nelas = 0, nfppok = 0;
+  std::cout << "Processing " << C->GetNtrees() << " files..." << std::endl;
   int treenum = 0, currenttreenum = 0;
 
   // progress: one line every print_every events (plain lines, so it works in batch / log files)
@@ -238,15 +249,13 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "out/gep_
   auto t_start = std::chrono::steady_clock::now();
   auto print_progress = [&](long n) {
     double el = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_start).count();
-    double frac = nevents > 0 ? double(n) / nevents : 0.;
-    double eta = frac > 0 ? el * (1. - frac) / frac : 0.;
     TString fname = C->GetCurrentFile() ? gSystem->BaseName(C->GetCurrentFile()->GetName()) : "";
-    printf("[%5.1f%%] %ld/%ld events | file %d/%d %s | passed %ld, elastic %ld, FPP ok %ld | %.0f s, ETA %.0f s\n",
-           100. * frac, n, nevents, C->GetTreeNumber() + 1, C->GetNtrees(), fname.Data(),
-           npass, nelas, nfppok, el, eta);
+    printf("%ld events | file %d/%d %s | passed %ld, elastic %ld, FPP ok %ld | %.0f s, %.0f ev/s\n",
+           n, C->GetTreeNumber() + 1, C->GetNtrees(), fname.Data(),
+           npass, nelas, nfppok, el, el > 0 ? n / el : 0.);
     fflush(stdout);
   };
-
+    
   while (C->GetEntry(nevent++)) {
     if (nevent % print_every == 0) print_progress(nevent);
 
@@ -310,7 +319,10 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "out/gep_
       if (fppCut) {
         nfppok++;
         h_phfpp->Fill(phfpp);
+	if (hel == +1) h_phfpp_hp->Fill(phfpp);
+	if (hel == -1) h_phfpp_hm->Fill(phfpp);
         fppPhi.Fill(thfpp, phfpp, hel);
+	fppPhiAll.Fill(thfpp, phfpp, hel);
       }
     }
 
@@ -326,8 +338,13 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "out/gep_
     T_thfpp = thfpp; T_phfpp = phfpp; T_sclose = sclose; T_zclose = zclose; T_chi2fpp = chi2fpp;
     Tout->Fill();
   }
-  print_progress(nevents);
-  std::cout << nevents << " events read, " << npass << " passed the global cut, "
+
+  fppPhi.Finalize();
+  fppPhiAll.Finalize();
+
+  long nread = nevent - 1;
+  print_progress(nread);
+  std::cout << nread << " events read, " << npass << " passed the global cut, "
             << nelas << " elastic, " << nfppok << " elastic with a good FPP scattering." << std::endl;
 
   // ================================================================
@@ -365,6 +382,15 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "out/gep_
   // ================================================================
   // 6. Plots and output
   // ================================================================
+  TH1D *h_phfpp_sum  = (TH1D*)h_phfpp_hp->Clone("h_phi_fpp_sum");
+  h_phfpp_sum->Add(h_phfpp_hm);               // N+ + N-
+  h_phfpp_sum->SetTitle("N^{+} + N^{-}");
+
+  TH1D *h_phfpp_diff = (TH1D*)h_phfpp_hp->Clone("h_phi_fpp_diff");
+  h_phfpp_diff->Add(h_phfpp_hm, -1.);         // N+ - N-
+  h_phfpp_diff->SetTitle("N^{+} - N^{-}");
+ 
+
   TCanvas *c1 = new TCanvas("c1", "elastic selection", 1200, 1000);
   c1->Divide(2, 2);
   c1->cd(1); h2_dxdy->Draw("colz");
@@ -385,14 +411,25 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "out/gep_
   c2->cd(4); h_sclose->Draw();
   c2->Write();
 
+
+  TCanvas *c3 = new TCanvas("c3", "FPP", 1200, 1000);
+  c3->Divide(2,2);
+  c3->cd(1); h_phfpp_hp->Draw("E");
+  c3->cd(2); h_phfpp_hm->Draw("E");
+  c3->cd(3); h_phfpp_sum->Draw("E");
+  c3->cd(4); h_phfpp_diff->Draw("E");
+  c3->Write();
+
   if (jmgr->GetValueFromKey<bool>("save_pdf", true)) {
     TString pdf = Form("%s_%s.pdf", filebase.c_str(), gepconf.GetLabel().c_str());
     c1->Print(pdf + "(");
-    c2->Print(pdf + ")");
+    c2->Print(pdf);
+    c3->Print(pdf + ")");
     std::cout << "Plots written to " << pdf << std::endl;
   }
 
   fppPhi.Write();
+  fppPhiAll.Write();
   fout->Write();
   std::cout << "Output written to " << outFile << std::endl;
 
