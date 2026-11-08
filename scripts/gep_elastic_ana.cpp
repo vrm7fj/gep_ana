@@ -37,7 +37,7 @@
 
 #include "../include/gep-ana.h"
 
-int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_out")
+int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_out", int onlyrun = -1)
 {
   gErrorIgnoreLevel = kError;
   TStopwatch *sw = new TStopwatch(); sw->Start();
@@ -52,6 +52,7 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   std::string rootfile_dir = jmgr->GetValueFromKey_str("rootfile_dir");
   std::string file_pattern = jmgr->GetValueFromKey<std::string>("file_pattern", "*%d*.root");
   std::vector<int> runnums; jmgr->GetVectorFromKey<int>("runnums", runnums);
+  if (onlyrun > 0 ) runnums = {onlyrun};
   int nruns = jmgr->GetValueFromKey<int>("Nruns_to_ana", -1);
   if (nruns < 1 || nruns > int(runnums.size())) nruns = runnums.size();
   int max_files_per_run = jmgr->GetValueFromKey<int>("max_files_per_run", -1);
@@ -116,7 +117,7 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
 
   // SBS (proton) track: target and focal-plane variables, needed for spin transport
   double ntrack = 0, vz[maxNtr], tgy[maxNtr], tgth[maxNtr], tgph[maxNtr], tgdp[maxNtr];
-  double fpx[maxNtr], fpy[maxNtr], fpth[maxNtr], fpph[maxNtr];
+  double fpx[maxNtr], fpy[maxNtr], fpth[maxNtr], fpth_bfr[maxNtr], fpph[maxNtr];
   setrootvar::setbranch(C, "sbs.tr",
     {"n","vz","tg_y","tg_th","tg_ph","tg_dp","x","y","th","ph"},
     {&ntrack,&vz,&tgy,&tgth,&tgph,&tgdp,&fpx,&fpy,&fpth,&fpph});
@@ -198,7 +199,7 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   Tout->Branch("fppCut", &fppCut, "fppCut/O");
   int T_run, T_hel, T_nfpp;
   double T_Q2, T_eps, T_pp, T_pp_el, T_dpp, T_thp, T_php, T_eprime, T_the, T_dphi, T_dt;
-  double T_vz, T_tgy, T_tgth, T_tgph, T_tgdp, T_fpx, T_fpy, T_fpth, T_fpph;
+  double T_vz, T_tgy, T_tgth, T_tgph, T_tgdp, T_fpx, T_fpy, T_fpth, T_fpth_bfr, T_fpph;
   double T_eECAL, T_xECAL, T_yECAL, T_xECAL_exp, T_yECAL_exp, T_dx, T_dy;
   double T_thfpp, T_phfpp, T_sclose, T_zclose, T_chi2fpp;
   Tout->Branch("run", &T_run, "run/I");
@@ -222,6 +223,7 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   Tout->Branch("fp_x", &T_fpx, "fp_x/D");
   Tout->Branch("fp_y", &T_fpy, "fp_y/D");
   Tout->Branch("fp_th", &T_fpth, "fp_th/D");
+  Tout->Branch("fp_th_bfr", &T_fpth_bfr, "fp_th_bfr/D");
   Tout->Branch("fp_ph", &T_fpph, "fp_ph/D");
   Tout->Branch("eECAL", &T_eECAL, "eECAL/D");
   Tout->Branch("xECAL", &T_xECAL, "xECAL/D");

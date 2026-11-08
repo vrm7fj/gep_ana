@@ -19,12 +19,13 @@
 
     "rootfile_dir"         : "/volatile/halla/sbs/vidura/parsed-rootfiles/PHYSICS/",
     "file_pattern"         : "gep5_fullreplay_%d_*.root",
-    "runnums_all"              : [5011, 5030, 5033, 5058, 5090, 5118, 5130, 5161, 5195, 5230, 5543, 5659, 5663, 5664, 5666, 5668, 5669, 5670, 5672, 5673, 5676, 5677, 5678, 5679, 5951, 5952, 5953, 5954, 5956, 5959, 5961, 5965, 5968, 5969],
-    "runnums"              : [5011, 5030, 5033, 5058, 5090],
+    "runnums_0"              : [5011, 5030, 5033, 5058, 5090, 5118, 5130, 5161, 5195, 5230, 5543, 5659, 5663, 5664, 5666, 5668, 5669, 5670, 5672, 5673, 5676, 5677, 5678, 5679, 5702, 5703, 5705, 5707, 5711, 5712, 5713, 5951, 5952, 5953, 5954, 5956, 5959, 5961, 5965, 5968, 5969, 5717],
+    "runnums_1"              : [3596, 3597, 3598, 3599, 3600, 3628, 3629, 3635, 3637, 3639, 3640, 3641, 3642, 3643, 3650, 3654, 3655, 3657, 3658, 3659, 3661, 3662, 3664, 3665, 3667, 3671, 3672, 3674, 3675, 3676, 3687, 3688, 3691, 3759, 3789, 3792, 3793, 3796, 3799, 3800, 3803, 3804, 3805, 3815, 3816, 3817, 3818, 3819, 3820, 3821, 3822, 3825, 3826, 3827, 3828, 3832, 3833, 3834, 3842, 3847, 3848, 3849, 3854, 3859, 3862, 3864, 3867, 3873, 3874, 3876, 3879, 3883, 3884, 3886, 3887, 3888, 3890, 3897, 3899, 3900, 3901, 3902, 3906, 3908, 3917, 3922, 3924, 3928, 3934, 4037, 4038, 4039, 4040, 4041, 4042, 4043, 4044, 4045, 4046, 4047, 4049, 4054, 4055, 4056, 4057, 4059, 4062, 4063, 4064, 4065, 4066, 4067, 4069, 4070, 4071, 4075, 4076, 4079, 4080, 4082, 4083, 4085, 4086, 4088, 4091, 4093, 4094, 4096],
+    "runnums"              : [5871, 5872, 5874, 5879, 5881, 5882, 5886, 5887, 5890, 5891, 5894, 5895, 5897, 5899, 5905, 5906, 5907, 5913, 5915, 5916, 5917],
     "Nruns_to_ana"         : -1,
     "max_files_per_run"    : -1,
 
-    "global_cut"           : "sqrt(pow((heep.dxECAL-0.01+0.025*earm.ecal.x)/0.0125,2)+pow((heep.dyECAL-(0.0019+0.00365*earm.ecal.x+0.0171*pow(earm.ecal.x,2)+0.01448*pow(earm.ecal.x,3)))/0.0157,2))<=3.5&&abs(heep.dt_ADC-0.5)<9&&abs(heep.dpp-0.0164)<0.04&&sbs.gemFPP.track.sclose<0.005&&abs(sbs.tr.vz+0.1)<0.175&&(sbs.gemFT.track.nhits>4||sbs.gemFT.track.ngoodhits>2)&&sqrt(pow((sbs.gemFPP.track.y+sbs.gemFPP.track.yp*6.7-sbs.hcal.y+0.0132)/0.0425,2)+pow((sbs.gemFPP.track.x+sbs.gemFPP.track.xp*6.7-sbs.hcal.x-0.192)/0.0497,2))<=3.5&&sbs.gemFPP.track.ngoodhits>1&&earm.ecal.nblk>2&&sbs.hcal.nblk>1&&sbs.gemFPP.track.theta*TMath::RadToDeg()>1",
+    "global_cut"           : "sqrt(pow((heep.dxECAL-0.01+0.025*earm.ecal.x)/0.0125,2)+pow((heep.dyECAL-(0.0019+0.00365*earm.ecal.x+0.0171*pow(earm.ecal.x,2)+0.01448*pow(earm.ecal.x,3)))/0.0157,2))<=3.5&&abs(heep.dt_ADC-0.5)<9&&abs(heep.dpp-0.0164)<0.04&&abs(sbs.tr.vz+0.1)<0.175&&(sbs.gemFT.track.nhits>4||sbs.gemFT.track.ngoodhits>2)&&sqrt(pow((sbs.gemFPP.track.y+sbs.gemFPP.track.yp*6.7-sbs.hcal.y+0.0132)/0.0425,2)+pow((sbs.gemFPP.track.x+sbs.gemFPP.track.xp*6.7-sbs.hcal.x-0.192)/0.0497,2))<=3.5&&sbs.gemFPP.track.ngoodhits>1&&earm.ecal.nblk>2&&sbs.hcal.nblk>1",
     "extra_branches_for_global_cut" : [
         "heep.*", "earm.ecal.*", "sbs.tr.*", "Ndata.sbs.tr.*",
         "sbs.gemFT.track.*", "Ndata.sbs.gemFT.track.*",
@@ -45,8 +46,8 @@
     "theta_fpp_cut_deg"    : [1.0, 10.0],
     "zclose_cut"           : [1.0, 2.0],
     "sclose_max"           : 0.005,
-    "theta_fpp_bins_deg"   : [1, 2, 3, 4, 5, 6, 7, 8, 9],
-    "n_phi_bins"           : 48,
+    "theta_fpp_bins_deg"   : [2, 3, 4, 5, 6, 7, 8, 9],
+    "n_phi_bins"           : 12,
 
     "helicity_sign"        : 1,
     "helicity_sign_by_run" : {},
