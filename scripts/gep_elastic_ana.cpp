@@ -117,6 +117,8 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   std::map<std::string, int> ihwp_by_run;
   std::string ihwp_file = jmgr->GetValueFromKey<std::string>("ihwp_file", "");
   if (!ihwp_file.empty()) {
+    // a relative path is taken relative to the config file's folder, not the working directory
+    if (ihwp_file[0] != '/') ihwp_file = std::string(gSystem->GetDirName(configfilename).Data()) + "/" + ihwp_file;
     JSONManager jih(ihwp_file);
     ihwp_by_run = jih.GetValueFromKey<std::map<std::string, int>>("ihwp_by_run", {});
     std::cout << "IHWP states for " << ihwp_by_run.size() << " runs read from " << ihwp_file << std::endl;

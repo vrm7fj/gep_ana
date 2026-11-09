@@ -34,7 +34,8 @@ while True:
         info = f"file {f}/{nf}  FPP ok {fpp}"
         if not m and state != "done":                        # no progress line yet: show where it is
             last = [l for l in text.splitlines() if l.strip() and not l.startswith("EXIT ")]
-            info = (last[-1][:70] if last else "(log empty)")
+            flagged = [l for l in last if "**!**" in l]       # the macro marks its own errors with **!**
+            info = ((flagged or last)[-1].strip()[:90] if last else "(log empty)")
             if ex: info += f"  [exit {ex.group(1)}]"
         lines.append(f"{run:>6}  {state:<8} {info}")
     os.system("clear")
