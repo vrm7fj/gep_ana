@@ -14,11 +14,11 @@ rm -f $OUT/logs/run_*.log
 
 # start the jobs in the background (note the & at the end)
 echo "$RUNS" | tr ' ' '\n' | xargs -P $NCORES -I{} sh -c \
-  "root -l -b -q 'gep_elastic_ana.cpp(\"$CFG\",\"$OUT/gep5_{}\",{})' > $OUT/logs/run_{}.log 2>&1" &
+  "root -l -b -q 'gep_elastic_ana.cpp(\"$CFG\",\"$OUT/gep5_{}\",{})' > $OUT/logs/run_{}.log 2>&1; echo EXIT \$? >> $OUT/logs/run_{}.log" &
 JOBS=$!
 
 # live status in the foreground
-python3 "$(dirname "$0")/status.py" $OUT/logs 1
+python3 "$(dirname "$0")/status.py" $OUT/logs 5 $CFG
 
 # make sure all jobs are finished before the script ends
 wait $JOBS
