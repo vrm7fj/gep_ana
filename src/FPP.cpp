@@ -1,4 +1,5 @@
 #include <cmath>
+#include "TMath.h"
 #include "../include/FPP.h"
 
 namespace fpp {

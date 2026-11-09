@@ -2,7 +2,7 @@
 #define GEP_FPP_H
 
 #include "TVector3.h"
-#include "vector"
+#include <vector>
 
 /*
    Focal-plane polarimeter geometry: the proton's secondary scattering in the
