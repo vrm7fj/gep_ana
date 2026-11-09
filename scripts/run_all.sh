@@ -1,5 +1,7 @@
 #!/bin/bash
 # usage: ./run_all.sh ../config/gep5/conf_gep5.json [ncores]
+# Runs every run in "runnums", ncores at a time, printing all output to the terminal.
+# Ctrl-C stops everything (running and queued). Logs still go to ../out/runs/logs.
 CFG=$1
 NCORES=${2:-5}
 OUT=../out/runs
@@ -8,18 +10,11 @@ mkdir -p $OUT/logs
 # run list = "runnums" from the config
 RUNS=$(python3 -c "import json,sys; print(' '.join(map(str, json.load(open('$CFG'))['runnums'])))")
 
-# remove logs of a previous attempt, otherwise status.py shows them as done
-#for r in $RUNS; do rm -f $OUT/logs/run_$r.log; done
+# remove logs of a previous attempt
 rm -f $OUT/logs/run_*.log
 
-# start the jobs in the background (note the & at the end)
-echo "$RUNS" | tr ' ' '\n' | xargs -P $NCORES -I{} sh -c \
-  "root -l -b -q 'gep_elastic_ana.cpp(\"$CFG\",\"$OUT/gep5_{}\",{})' > $OUT/logs/run_{}.log 2>&1; echo EXIT \$? >> $OUT/logs/run_{}.log" &
-JOBS=$!
+# Ctrl-C: kill this whole process group (xargs, every root job, tee/sed)
+trap 'echo; echo "Ctrl-C: killing all jobs"; trap - INT TERM; kill -KILL 0' INT TERM
 
-# live status in the foreground
-python3 "$(dirname "$0")/status.py" $OUT/logs 5 $CFG
-
-# make sure all jobs are finished before the script ends
-wait $JOBS
+echo "$RUNS" | tr ' ' '\n' | xargs -P $NCORES -I{} "$(dirname "$0")/run_one.sh" "$CFG" "$OUT" {}
 echo "all jobs finished"
