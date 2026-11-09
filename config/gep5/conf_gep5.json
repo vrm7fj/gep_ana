@@ -52,6 +52,7 @@
 
     "helicity_sign"        : 1,
     "helicity_sign_by_run" : {},
+    "ihwp_file"            : "ihwp.json",
 
     "h_dpp_lims"           : [100, -0.1, 0.1],
     "h_dx_ecal_lims"       : [100, -0.15, 0.15],
@@ -60,9 +61,9 @@
     "h_Q2_lims"            : [100, 8, 16],
 
     "save_pdf"             : true,
-    "print_every"          : 1000
+    "print_every"          : 1000,
 
     "use_cone_test"        : true,
     "fpp_cone_zback"       : 2.8,
-    "fpp_active_area"      : [-1.0, 1.00, -0.30, 0.30],
+    "fpp_active_area"      : [-1.0, 1.00, -0.30, 0.30]
 }

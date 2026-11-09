@@ -1,0 +1,111 @@
+/*
+   ihwp_runs.C : IHWP state of every run in a gep-ana config, from the EPICS
+   variable IGL1I00OD16_16 in the replayed tree T (+1 = IN, -1 = OUT).
+
+   For each run it counts the events with IHWP = +1 and = -1 (events before the
+   first EPICS read, 0 or 1e38, are ignored) and calls the run
+     IN (+1)      only +1 seen
+     OUT (-1)     only -1 seen
+     MIXED (0)    both seen  -> IHWP changed during the run, check the e-log
+     UNKNOWN (0)  nothing seen / branch missing / no files
+
+   Output:
+     <outbase>.txt   per-run table + run ranges with the same state
+     <outbase>.json  {"ihwp_by_run": {"3596": 1, ...}}
+
+   Usage (from scripts/):
+     analyzer -l -b -q 'ihwp_runs.C("../config/gep5/conf_gep5.json","../out/ihwp_gep5",1)'
+   The last argument is the number of files per run to read (default 1: the IHWP
+   does not change within a run normally; use -1 to read all files and catch
+   mid-run changes, slower).
+*/
+#include <map>
+#include <vector>
+#include <fstream>
+#include <iostream>
+
+#include "TChain.h"
+#include "TObjArray.h"
+
+#include "../include/gep-ana.h"
+
+void ihwp_runs(const char *configfilename, std::string outbase = "../out/ihwp", int max_files = 1)
+{
+  JSONManager *jmgr = new JSONManager(configfilename);
+  std::string rootfile_dir = jmgr->GetValueFromKey_str("rootfile_dir");
+  std::string file_pattern = jmgr->GetValueFromKey<std::string>("file_pattern", "*%d*.root");
+  std::vector<int> runnums; jmgr->GetVectorFromKey<int>("runnums", runnums);
+  std::sort(runnums.begin(), runnums.end());
+
+  const char *var = "IGL1I00OD16_16";
+  TString selIN  = Form("%s > 0.5 && %s < 1.5", var, var);
+  TString selOUT = Form("%s < -0.5 && %s > -1.5", var, var);
+
+  std::map<int, int> state;              // run -> +1, -1, 0
+  std::map<int, std::string> label;
+  std::map<int, std::pair<long, long>> counts;
+
+  for (int run : runnums) {
+    // same file lookup as gep_elastic_ana.cpp
+    std::string rfname = rootfile_dir + "/" + Form(file_pattern.c_str(), run);
+    TChain all("T"); all.Add(rfname.c_str());
+    TObjArray *fl = all.GetListOfFiles();
+    TChain C("T");
+    for (int k = 0; k < fl->GetEntries() && (max_files < 0 || k < max_files); k++)
+      C.Add(fl->At(k)->GetTitle());
+
+    long nin = 0, nout = 0;
+    std::string lab;
+    if (C.GetNtrees() == 0) {
+      lab = "UNKNOWN (no files)";
+    } else if (C.LoadTree(0) < 0 || !C.GetBranch(var)) {
+      lab = "UNKNOWN (no branch)";
+    } else {
+      nin  = C.GetEntries(selIN);
+      nout = C.GetEntries(selOUT);
+      if      (nin > 0 && nout == 0) lab = "IN";
+      else if (nout > 0 && nin == 0) lab = "OUT";
+      else if (nin > 0 && nout > 0)  lab = "MIXED";
+      else                           lab = "UNKNOWN (not read)";
+    }
+    int s = (lab == "IN") ? 1 : (lab == "OUT" ? -1 : 0);
+    state[run] = s; label[run] = lab; counts[run] = {nin, nout};
+    printf("%6d  %-20s  (+1: %ld, -1: %ld events, %d files)\n", run, lab.c_str(), nin, nout, C.GetNtrees());
+    fflush(stdout);
+  }
+
+  // ---- text output: per-run table and ranges of consecutive runs (in the list) with the same state
+  std::ofstream txt((outbase + ".txt").c_str());
+  txt << "# IHWP state from " << var << " (+1 = IN, -1 = OUT), config " << configfilename << "\n";
+  txt << "# run  state  label  n(+1)  n(-1)\n";
+  for (int run : runnums)
+    txt << run << "  " << state[run] << "  " << label[run] << "  "
+        << counts[run].first << "  " << counts[run].second << "\n";
+
+  txt << "\n# ranges (consecutive runs in the run list with the same state)\n";
+  std::cout << "\n---- IHWP ranges ----" << std::endl;
+  size_t i = 0;
+  while (i < runnums.size()) {
+    size_t j = i;
+    while (j + 1 < runnums.size() && label[runnums[j + 1]] == label[runnums[i]]) j++;
+    TString line = Form("%5d - %5d : %-20s (%2d) %3zu runs",
+                        runnums[i], runnums[j], label[runnums[i]].c_str(), state[runnums[i]], j - i + 1);
+    std::cout << line << std::endl;
+    txt << line << "\n";
+    i = j + 1;
+  }
+  txt.close();
+
+  // ---- json output
+  std::ofstream js((outbase + ".json").c_str());
+  js << "{\n    \"ihwp_by_run\" : {";
+  for (size_t k = 0; k < runnums.size(); k++)
+    js << (k ? ", " : "") << (k % 10 == 0 ? "\n        " : "") << "\"" << runnums[k] << "\": " << state[runnums[k]];
+  js << "\n    }\n}\n";
+  js.close();
+
+  int nbad = 0;
+  for (int run : runnums) if (state[run] == 0) nbad++;
+  std::cout << "\n" << runnums.size() << " runs, " << nbad << " MIXED/UNKNOWN" << std::endl;
+  std::cout << "Written " << outbase << ".txt and " << outbase << ".json" << std::endl;
+}

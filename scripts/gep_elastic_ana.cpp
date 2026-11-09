@@ -15,6 +15,8 @@
                             so the count is Ndata.sbs.gemFPP.track.theta (not .ntrack)
      earm.ecal.*            ECAL best cluster
      scalhel.*              helicity (-1, 0 = undefined, +1)
+     IGL1I00OD16_16         IHWP state from EPICS (+1 IN, -1 OUT); per-run values can be
+                            given instead with "ihwp_file" (output of scripts/ihwp_runs.C)
 
    Cut flags in Tout:
      dppCut, ecalCut, dphiCut, fiduCut, elasticCut   elastic selection
@@ -106,10 +108,19 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   std::vector<double> fpp_area; jmgr->GetVectorFromKey<double>("fpp_active_area", fpp_area);   // {xmin,xmax,ymin,ymax}
   if (use_cone && fpp_area.size() != 4) { std::cerr << "fpp_active_area needs 4 values **!**" << std::endl; return 1; }
 
-  // helicity: global sign, optionally overridden per run (IHWP state)
+  // helicity: overall sign (Wien flip / decoder convention), optionally overridden per run
   int hel_sign = jmgr->GetValueFromKey<int>("helicity_sign", 1);
   std::map<std::string, int> hel_sign_by_run =
     jmgr->GetValueFromKey<std::map<std::string, int>>("helicity_sign_by_run", {});
+
+  // IHWP state per run, from scripts/ihwp_runs.C (optional; EPICS per event is the fallback)
+  std::map<std::string, int> ihwp_by_run;
+  std::string ihwp_file = jmgr->GetValueFromKey<std::string>("ihwp_file", "");
+  if (!ihwp_file.empty()) {
+    JSONManager jih(ihwp_file);
+    ihwp_by_run = jih.GetValueFromKey<std::map<std::string, int>>("ihwp_by_run", {});
+    std::cout << "IHWP states for " << ihwp_by_run.size() << " runs read from " << ihwp_file << std::endl;
+  }
 
   // ================================================================
   // 2. Branches
@@ -153,6 +164,10 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   for (auto &b : jmgr->GetValueFromKey<std::vector<std::string>>("extra_branches_for_global_cut", {}))
     C->SetBranchStatus(b.c_str(), 1);
 
+  // IHWP from EPICS (+1 IN, -1 OUT, 0/1e38 before the first EPICS read)
+  double ihwp_raw = 0;
+  setrootvar::setbranch(C, "IGL1I00OD16_16", "", &ihwp_raw);
+
   // ================================================================
   // 3. Output tree
   // ================================================================
@@ -169,13 +184,15 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   Tout->Branch("fppNoConeCut", &fppNoConeCut, "fppNoConeCut/O");
   Tout->Branch("coneCut", &coneCut, "coneCut/O");
   Tout->Branch("fppCut", &fppCut, "fppCut/O");
-  int T_run, T_hel, T_nfpp;
+  int T_run, T_hel, T_hel_raw, T_ihwp, T_nfpp;
   double T_Q2, T_eps, T_pp, T_pp_el, T_dpp, T_thp, T_php, T_eprime, T_the, T_dphi, T_dt;
   double T_vz, T_tgy, T_tgth, T_tgph, T_tgdp, T_fpx, T_fpy, T_fpth, T_fpph;
   double T_eECAL, T_xECAL, T_yECAL, T_xECAL_exp, T_yECAL_exp, T_dx, T_dy;
   double T_thfpp, T_phfpp, T_sclose, T_zclose, T_chi2fpp;
   Tout->Branch("run", &T_run, "run/I");
-  Tout->Branch("helicity", &T_hel, "helicity/I");
+  Tout->Branch("helicity", &T_hel, "helicity/I");             // corrected: raw * sign * IHWP
+  Tout->Branch("helicity_raw", &T_hel_raw, "helicity_raw/I");  // as decoded (scalhel.hel)
+  Tout->Branch("IHWP", &T_ihwp, "IHWP/I");                     // +1 IN, -1 OUT, 0 unknown
   Tout->Branch("Q2", &T_Q2, "Q2/D");
   Tout->Branch("epsilon", &T_eps, "epsilon/D");
   Tout->Branch("pp", &T_pp, "pp/D");
@@ -282,12 +299,21 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
       fppCut = fppNoConeCut && coneCut;
     }
 
-    // ---- helicity (0 if undefined or decoder error; sign corrected per run for IHWP)
+    // ---- helicity: raw decoded value (0 if undefined or decoder error),
+    //      times the overall sign, times -1 when the IHWP is IN; 0 if the IHWP state is unknown
     int run = int(runnum_d);
     int sign = hel_sign;
     auto its = hel_sign_by_run.find(std::to_string(run));
     if (its != hel_sign_by_run.end()) sign = its->second;
-    int hel = (hel_err != 0) ? 0 : (helicity_raw > 0 ? sign : (helicity_raw < 0 ? -sign : 0));
+
+    int hel_raw = (hel_err != 0) ? 0 : (helicity_raw > 0 ? 1 : (helicity_raw < 0 ? -1 : 0));
+
+    int ihwp = 0;
+    auto iti = ihwp_by_run.find(std::to_string(run));
+    if (iti != ihwp_by_run.end() && iti->second != 0) ihwp = iti->second;   // per-run value
+    else ihwp = (ihwp_raw > 0.5) ? 1 : (ihwp_raw < -0.5 ? -1 : 0);          // per-event EPICS
+
+    int hel = (ihwp == 0) ? 0 : hel_raw * sign * (ihwp == 1 ? -1 : 1);
 
     // ---- counters (printout only)
     if (elasticCut) {
@@ -297,7 +323,7 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
     }
 
     // ---- output tree
-    T_run = run; T_hel = hel; T_nfpp = nfpp;
+    T_run = run; T_hel = hel; T_hel_raw = hel_raw; T_ihwp = ihwp; T_nfpp = nfpp;
     T_Q2 = hv_Q2; T_eps = hv_eps;
     T_pp = hv_pp; T_pp_el = hv_ppel; T_dpp = dpp; T_thp = hv_pth; T_php = hv_pph;
     T_eprime = hv_eprime; T_the = hv_eth; T_dphi = dphi; T_dt = hv_dt;
