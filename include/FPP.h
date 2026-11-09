@@ -2,6 +2,7 @@
 #define GEP_FPP_H
 
 #include "TVector3.h"
+#include "vector"
 
 /*
    Focal-plane polarimeter geometry: the proton's secondary scattering in the
@@ -35,6 +36,9 @@ namespace fpp {
   // that point (zclose, should sit inside the analyzer).
   void ClosestApproach(const Track &in, const Track &out, double &sclose, double &zclose);
 
+  // Cone test
+  bool ConeTest(const Track &in, double zc, double zback, double thmax, const std::vector<double> &area);
+    
 }
 
 #endif

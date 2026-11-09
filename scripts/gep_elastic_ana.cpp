@@ -1,10 +1,11 @@
 /*
-   GEp elastic ep analysis: event selection + FPP angles, feeding the
-   polarization-observable stage. Structure follows gmn-ana's qelas_ana_data.cpp:
+   GEp elastic ep analysis: event selection + FPP angles -> output tree Tout.
+   Structure follows gmn-ana's qelas_ana_data.cpp:
 
      config (JSON) -> TChain of runs -> global cut (TTreeFormula)
-     -> per-event variables -> cut flags -> histograms + output tree Tout
-     -> polarization stage (src/Polarization.cpp)
+     -> per-event variables -> cut flags -> output tree Tout
+
+   Plotting and the polarization stage are done afterwards from Tout.
 
    Reads the SBS-replay GEp full-replay tree (checked on GEP5 run 5969, Aug-2026 pass):
      heep.*                 elastic kinematics + ECAL residuals computed by the replay
@@ -14,6 +15,14 @@
                             so the count is Ndata.sbs.gemFPP.track.theta (not .ntrack)
      earm.ecal.*            ECAL best cluster
      scalhel.*              helicity (-1, 0 = undefined, +1)
+
+   Cut flags in Tout:
+     dppCut, ecalCut, dphiCut, fiduCut, elasticCut   elastic selection
+     fppNoConeCut   theta_fpp, zclose and sclose windows on the chosen FPP track
+     coneCut        cone test: the cone of half-angle theta_fpp (this event's angle)
+                    around the incoming track, from zclose, fits inside the FPP
+                    active area at fpp_cone_zback (true when use_cone_test is false)
+     fppCut         fppNoConeCut && coneCut
 
    Usage (ROOT):
      root -l -b -q 'scripts/gep_elastic_ana.cpp("config/gep5/conf_gep5_5969.json","out/gep5")'
@@ -26,12 +35,9 @@
 #include "TSystem.h"
 
 #include "TCut.h"
-#include "TH1F.h"
-#include "TH2F.h"
 #include "TFile.h"
+#include "TTree.h"
 #include "TChain.h"
-#include "TCanvas.h"
-#include "TEllipse.h"
 #include "TStopwatch.h"
 #include "TTreeFormula.h"
 
@@ -94,11 +100,16 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   std::vector<double> zclose_cut; jmgr->GetVectorFromKey<double>("zclose_cut", zclose_cut);
   double sclose_max = jmgr->GetValueFromKey<double>("sclose_max");
 
+  // cone test (event by event: cone half-angle = that event's theta_fpp)
+  bool use_cone = jmgr->GetValueFromKey<bool>("use_cone_test", false);
+  double cone_zback = jmgr->GetValueFromKey<double>("fpp_cone_zback", 0.);
+  std::vector<double> fpp_area; jmgr->GetVectorFromKey<double>("fpp_active_area", fpp_area);   // {xmin,xmax,ymin,ymax}
+  if (use_cone && fpp_area.size() != 4) { std::cerr << "fpp_active_area needs 4 values **!**" << std::endl; return 1; }
+
   // helicity: global sign, optionally overridden per run (IHWP state)
   int hel_sign = jmgr->GetValueFromKey<int>("helicity_sign", 1);
   std::map<std::string, int> hel_sign_by_run =
     jmgr->GetValueFromKey<std::map<std::string, int>>("helicity_sign_by_run", {});
-  double Pbeam = jmgr->GetValueFromKey<double>("beam_polarization", 0.);
 
   // ================================================================
   // 2. Branches
@@ -115,9 +126,9 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
     {&hv_valid,&hv_dpp,&hv_dx,&hv_dy,&hv_dphi,&hv_Q2,&hv_eps,&hv_eprime,&hv_eth,&hv_ephi,
      &hv_pp,&hv_pth,&hv_pph,&hv_ppel,&hv_dt});
 
-  // SBS (proton) track: target and focal-plane variables, needed for spin transport
+  // SBS (proton) track: target and focal-plane variables, needed for spin transport and the cone test
   double ntrack = 0, vz[maxNtr], tgy[maxNtr], tgth[maxNtr], tgph[maxNtr], tgdp[maxNtr];
-  double fpx[maxNtr], fpy[maxNtr], fpth[maxNtr], fpth_bfr[maxNtr], fpph[maxNtr];
+  double fpx[maxNtr], fpy[maxNtr], fpth[maxNtr], fpph[maxNtr];
   setrootvar::setbranch(C, "sbs.tr",
     {"n","vz","tg_y","tg_th","tg_ph","tg_dp","x","y","th","ph"},
     {&ntrack,&vz,&tgy,&tgth,&tgph,&tgdp,&fpx,&fpy,&fpth,&fpph});
@@ -143,63 +154,24 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
     C->SetBranchStatus(b.c_str(), 1);
 
   // ================================================================
-  // 3. Output: histograms and tree
+  // 3. Output tree
   // ================================================================
   TString outFile = Form("%s_%s.root", filebase.c_str(), gepconf.GetLabel().c_str());
   TFile *fout = new TFile(outFile.Data(), "RECREATE");
 
-  std::vector<double> l_dpp, l_dx, l_dy, l_dphi, l_Q2;
-  jmgr->GetVectorFromKey<double>("h_dpp_lims", l_dpp);
-  jmgr->GetVectorFromKey<double>("h_dx_ecal_lims", l_dx);
-  jmgr->GetVectorFromKey<double>("h_dy_ecal_lims", l_dy);
-  jmgr->GetVectorFromKey<double>("h_dphi_lims", l_dphi);
-  jmgr->GetVectorFromKey<double>("h_Q2_lims", l_Q2);
-
-  TH1F *h_dpp      = util::TH1Flims("h_dpp",      ";p/p_{el}(#theta_{p}) - 1;", l_dpp);
-  TH1F *h_dpp_cut  = util::TH1Flims("h_dpp_cut",  "ECAL spot cut;p/p_{el}(#theta_{p}) - 1;", l_dpp);
-  TH1F *h_dpp_acut = util::TH1Flims("h_dpp_acut", "ECAL spot anti-cut;p/p_{el}(#theta_{p}) - 1;", l_dpp);
-  TH1F *h_dx       = util::TH1Flims("h_dx_ecal",  ";x_{ECAL} - x_{exp} (m);", l_dx);
-  TH1F *h_dy       = util::TH1Flims("h_dy_ecal",  ";y_{ECAL} - y_{exp} (m);", l_dy);
-  TH2F *h2_dxdy    = util::TH2Flims("h2_dxdy_ecal", ";y_{ECAL} - y_{exp} (m);x_{ECAL} - x_{exp} (m)", l_dy, l_dx);
-  TH1F *h_dphi     = util::TH1Flims("h_dphi",     ";#phi_{e} - #phi_{p} - #pi (rad);", l_dphi);
-  TH1F *h_Q2       = util::TH1Flims("h_Q2",       ";Q^{2} (GeV^{2});", l_Q2);
-  TH2F *h2_xyECAL  = new TH2F("h2_xyECAL_exp", "expected e' at ECAL;y_{exp} (m);x_{exp} (m)",
-                              100, ecal_area[2] - 0.2, ecal_area[3] + 0.2, 100, ecal_area[0] - 0.2, ecal_area[1] + 0.2);
-  TH1F *h_thfpp    = new TH1F("h_theta_fpp", ";#theta_{fpp} (deg);", 200, 0, 25);
-  TH1F *h_phfpp    = new TH1F("h_phi_fpp",   ";#phi_{fpp} (rad);", 72, -constant::pi, constant::pi);
-  TH1D *h_phfpp_hp = new TH1D("h_phi_fpp_hp", "h = +1;#phi_{fpp} (rad);counts", 24, -constant::pi, constant::pi);
-  TH1D *h_phfpp_hm = new TH1D("h_phi_fpp_hm", "h = -1;#phi_{fpp} (rad);counts", 24, -constant::pi, constant::pi);
-  // TH1D *h_phfpp_hdiff_all = new TH1D("h_phi_fpp_hdiff_all", "N_{+} - N_{-};#phi_{fpp} (rad);counts", 24, -constant::pi, constant::pi);
-  // TH1D *h_phfpp_hsum_all = new TH1D("h_phi_fpp_hsum_all", "N_{+} + N_{-};#phi_{fpp} (rad);counts", 24, -constant::pi, constant::pi);
-  // TH1D *h_phfpp_hasym_all = new TH1D("h_phi_fpp_hasym_all", "(N_{+} - N_{-})/(N_{+} + N_{-});#phi_{fpp} (rad);counts", 24, -constant::pi, constant::pi);
-  TH1F *h_zclose   = new TH1F("h_zclose",    ";z_{close} (m);", 200, -1, 5);
-  TH1F *h_sclose   = new TH1F("h_sclose",    ";s_{close} (m);", 200, 0, 0.1);
-  TH1F *h_hel      = new TH1F("h_helicity",  ";helicity;", 3, -1.5, 1.5);
-
-  //error for sum/difference
-  h_phfpp_hp->Sumw2();
-  h_phfpp_hm->Sumw2();
-
-  // phi_fpp per helicity and theta_fpp bin -> input to the polarization stage
-  std::vector<double> th_bins; jmgr->GetVectorFromKey<double>("theta_fpp_bins_deg", th_bins);
-  for (auto &v : th_bins) v *= constant::deg2rad;
-  pol::FPPPhiHistos fppPhi;
-  fppPhi.Book("h_phi_fpp", jmgr->GetValueFromKey<int>("n_phi_bins", 24), th_bins);
-
-  pol::FPPPhiHistos fppPhiAll;
-  fppPhiAll.Book("h_phi_fpp_all", jmgr->GetValueFromKey<int>("n_phi_bins", 24), {thfpp_cut[0], thfpp_cut[1]});
-
   TTree *Tout = new TTree("Tout", "GEp elastic events");
-  bool dppCut, ecalCut, dphiCut, fiduCut, elasticCut, fppCut;
+  bool dppCut, ecalCut, dphiCut, fiduCut, elasticCut, fppNoConeCut, coneCut, fppCut;
   Tout->Branch("dppCut", &dppCut, "dppCut/O");
   Tout->Branch("ecalCut", &ecalCut, "ecalCut/O");
   Tout->Branch("dphiCut", &dphiCut, "dphiCut/O");
   Tout->Branch("fiduCut", &fiduCut, "fiduCut/O");
   Tout->Branch("elasticCut", &elasticCut, "elasticCut/O");
+  Tout->Branch("fppNoConeCut", &fppNoConeCut, "fppNoConeCut/O");
+  Tout->Branch("coneCut", &coneCut, "coneCut/O");
   Tout->Branch("fppCut", &fppCut, "fppCut/O");
   int T_run, T_hel, T_nfpp;
   double T_Q2, T_eps, T_pp, T_pp_el, T_dpp, T_thp, T_php, T_eprime, T_the, T_dphi, T_dt;
-  double T_vz, T_tgy, T_tgth, T_tgph, T_tgdp, T_fpx, T_fpy, T_fpth, T_fpth_bfr, T_fpph;
+  double T_vz, T_tgy, T_tgth, T_tgph, T_tgdp, T_fpx, T_fpy, T_fpth, T_fpph;
   double T_eECAL, T_xECAL, T_yECAL, T_xECAL_exp, T_yECAL_exp, T_dx, T_dy;
   double T_thfpp, T_phfpp, T_sclose, T_zclose, T_chi2fpp;
   Tout->Branch("run", &T_run, "run/I");
@@ -223,7 +195,6 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   Tout->Branch("fp_x", &T_fpx, "fp_x/D");
   Tout->Branch("fp_y", &T_fpy, "fp_y/D");
   Tout->Branch("fp_th", &T_fpth, "fp_th/D");
-  Tout->Branch("fp_th_bfr", &T_fpth_bfr, "fp_th_bfr/D");
   Tout->Branch("fp_ph", &T_fpph, "fp_ph/D");
   Tout->Branch("eECAL", &T_eECAL, "eECAL/D");
   Tout->Branch("xECAL", &T_xECAL, "xECAL/D");
@@ -242,7 +213,7 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   // ================================================================
   // 4. Event loop
   // ================================================================
-  long nevent = 0, npass = 0, nelas = 0, nfppok = 0;
+  long nevent = 0, npass = 0, nelas = 0, nconeok = 0, nfppok = 0;
   std::cout << "Processing " << C->GetNtrees() << " files..." << std::endl;
   int treenum = 0, currenttreenum = 0;
 
@@ -252,12 +223,12 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   auto print_progress = [&](long n) {
     double el = std::chrono::duration<double>(std::chrono::steady_clock::now() - t_start).count();
     TString fname = C->GetCurrentFile() ? gSystem->BaseName(C->GetCurrentFile()->GetName()) : "";
-    printf("%ld events | file %d/%d %s | passed %ld, elastic %ld, FPP ok %ld | %.0f s, %.0f ev/s\n",
+    printf("%ld events | file %d/%d %s | passed %ld, elastic %ld, cone ok %ld, FPP ok %ld | %.0f s, %.0f ev/s\n",
            n, C->GetTreeNumber() + 1, C->GetNtrees(), fname.Data(),
-           npass, nelas, nfppok, el, el > 0 ? n / el : 0.);
+           npass, nelas, nconeok, nfppok, el, el > 0 ? n / el : 0.);
     fflush(stdout);
   };
-    
+
   while (C->GetEntry(nevent++)) {
     if (nevent % print_every == 0) print_progress(nevent);
 
@@ -283,17 +254,32 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
 
     // ---- FPP: choose the track with the smallest sclose inside the theta/zclose windows
     double thfpp = -1, phfpp = -10, sclose = -1, zclose = -1000, chi2fpp = -1;
-    fppCut = false;
+    fppNoConeCut = false; coneCut = false; fppCut = false;
     int ibest = -1; double best = 1e9;
     for (int it = 0; it < nfpp && it < maxNtr; it++) {
       if (!cut::InWindow(fpp_th[it], thfpp_cut) || !cut::InWindow(fpp_zc[it], zclose_cut)) continue;
       if (fpp_sc[it] < best) { best = fpp_sc[it]; ibest = it; }
     }
-    if (ibest < 0 && nfpp > 0) ibest = 0;            // keep something for the plots
+    if (ibest < 0 && nfpp > 0) ibest = 0;            // keep something in the tree
     if (ibest >= 0) {
       thfpp = fpp_th[ibest]; phfpp = fpp_ph[ibest]; sclose = fpp_sc[ibest];
       zclose = fpp_zc[ibest]; chi2fpp = fpp_chi2[ibest];
-      fppCut = cut::InWindow(thfpp, thfpp_cut) && cut::InWindow(zclose, zclose_cut) && sclose < sclose_max;
+
+      fppNoConeCut = cut::InWindow(thfpp, thfpp_cut) && cut::InWindow(zclose, zclose_cut) && sclose < sclose_max;
+
+      // ---- cone test: incoming proton track at the focal plane (z0 = 0, front-tracker frame)
+      fpp::Track in;
+      in.x  = fpx[0];    // sbs.tr.x
+      in.y  = fpy[0];    // sbs.tr.y
+      in.xp = fpth[0];   // sbs.tr.th (dx/dz)
+      in.yp = fpph[0];   // sbs.tr.ph (dy/dz)
+      in.z0 = 0.;
+      in.valid = true;
+
+      coneCut = !use_cone || (cut::InWindow(zclose, zclose_cut) &&
+                              fpp::ConeTest(in, zclose, cone_zback, thfpp, fpp_area));
+
+      fppCut = fppNoConeCut && coneCut;
     }
 
     // ---- helicity (0 if undefined or decoder error; sign corrected per run for IHWP)
@@ -303,29 +289,11 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
     if (its != hel_sign_by_run.end()) sign = its->second;
     int hel = (hel_err != 0) ? 0 : (helicity_raw > 0 ? sign : (helicity_raw < 0 ? -sign : 0));
 
-    // ---- fill histograms
-    h_dpp->Fill(dpp);
-    if (fiduCut) (ecalCut ? h_dpp_cut : h_dpp_acut)->Fill(dpp);
-    if (dppCut && fiduCut) { h_dx->Fill(dx); h_dy->Fill(dy); h2_dxdy->Fill(dy, dx); }
-    if (dppCut && ecalCut) h_dphi->Fill(dphi);
-    h2_xyECAL->Fill(yexp, xexp);
+    // ---- counters (printout only)
     if (elasticCut) {
       nelas++;
-      h_Q2->Fill(hv_Q2);
-      h_hel->Fill(hel);
-      if (thfpp >= 0) {
-        h_thfpp->Fill(thfpp / constant::deg2rad);
-        h_zclose->Fill(zclose);
-        h_sclose->Fill(sclose);
-      }
-      if (fppCut) {
-        nfppok++;
-        h_phfpp->Fill(phfpp);
-	if (hel == +1) h_phfpp_hp->Fill(phfpp);
-	if (hel == -1) h_phfpp_hm->Fill(phfpp);
-        fppPhi.Fill(thfpp, phfpp, hel);
-	fppPhiAll.Fill(thfpp, phfpp, hel);
-      }
+      if (ibest >= 0 && coneCut) nconeok++;
+      if (fppCut) nfppok++;
     }
 
     // ---- output tree
@@ -341,98 +309,18 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
     Tout->Fill();
   }
 
-  fppPhi.Finalize();
-  fppPhiAll.Finalize();
-
   long nread = nevent - 1;
   print_progress(nread);
   std::cout << nread << " events read, " << npass << " passed the global cut, "
-            << nelas << " elastic, " << nfppok << " elastic with a good FPP scattering." << std::endl;
+            << nelas << " elastic, " << nconeok << " elastic passing the cone test, "
+            << nfppok << " elastic with a good FPP scattering." << std::endl;
 
   // ================================================================
-  // 5. Polarization stage (implement in src/Polarization.cpp)
+  // 5. Output
   // ================================================================
-  double pp_mean = 0, eprime_mean = 0, the_mean = 0, Q2_mean = h_Q2->GetMean();
-  if (Tout->GetEntries("elasticCut") > 0) {
-    Tout->Draw("pp:eprime:theta_e", "elasticCut", "goff");
-    int n = Tout->GetSelectedRows();
-    for (int i = 0; i < n; i++) {
-      pp_mean += Tout->GetV1()[i]; eprime_mean += Tout->GetV2()[i]; the_mean += Tout->GetV3()[i];
-    }
-    pp_mean /= n; eprime_mean /= n; the_mean /= n;
-  }
-  std::cout << "Elastic sample: <Q2> = " << Q2_mean << " GeV2, <p_p> = " << pp_mean
-            << " GeV, <theta_e> = " << the_mean / constant::deg2rad << " deg" << std::endl;
-
-  // (A) binned route
-  for (int i = 0; i < fppPhi.NThetaBins(); i++) {
-    TH1D *hA = pol::HelicityAsymmetry(fppPhi.Hplus(i), fppPhi.Hminus(i), Form("h_asym_th%d", i));
-    if (hA) hA->Write();
-  }
-  pol::FocalPlanePol fpPol = pol::FitAsymmetry(fppPhi, pp_mean, Pbeam);
-  double bend = jmgr->GetValueFromKey<double>("sbs_bend_angle_deg", 0.) * constant::deg2rad;
-  double chi = pol::SpinPrecessionAngle(pp_mean, bend);
-  pol::TargetPol tgtPol = pol::SpinTransport(fpPol, chi);
-  pol::Ratio R = pol::FormFactorRatio(tgtPol, gepconf.GetEbeam(), eprime_mean, the_mean);
-  // (B) event-by-event route
-  pol::TargetPol tgtPolML = pol::FitMaxLikelihood(Tout, Pbeam);
-
-  std::cout << "chi (dipole approx.) = " << chi / constant::deg2rad << " deg" << std::endl;
-  if (R.ok) std::cout << "mu_p GE/GM = " << R.R << " +/- " << R.R_err << std::endl;
-  else      std::cout << "mu_p GE/GM: not available yet (polarization stage not implemented)." << std::endl;
-
-  // ================================================================
-  // 6. Plots and output
-  // ================================================================
-  TH1D *h_phfpp_sum  = (TH1D*)h_phfpp_hp->Clone("h_phi_fpp_sum");
-  h_phfpp_sum->Add(h_phfpp_hm);               // N+ + N-
-  h_phfpp_sum->SetTitle("N^{+} + N^{-}");
-
-  TH1D *h_phfpp_diff = (TH1D*)h_phfpp_hp->Clone("h_phi_fpp_diff");
-  h_phfpp_diff->Add(h_phfpp_hm, -1.);         // N+ - N-
-  h_phfpp_diff->SetTitle("N^{+} - N^{-}");
- 
-
-  TCanvas *c1 = new TCanvas("c1", "elastic selection", 1200, 1000);
-  c1->Divide(2, 2);
-  c1->cd(1); h2_dxdy->Draw("colz");
-  TEllipse el; el.SetFillStyle(0); el.SetLineColor(2); el.SetLineWidth(2);
-  el.DrawEllipse(dy_ecal[0], dx_ecal[0], nsig_dy * dy_ecal[1], nsig_dx * dx_ecal[1], 0, 360, 0);
-  c1->cd(2); h_dpp->SetLineColor(1); h_dpp->Draw();
-  h_dpp_cut->SetLineColor(2); h_dpp_cut->Draw("same");
-  h_dpp_acut->SetLineColor(4); h_dpp_acut->Draw("same");
-  c1->cd(3); h_dphi->Draw();
-  c1->cd(4); h2_xyECAL->Draw("colz"); util::DrawArea(ecal_area); util::DrawArea(ecal_fidu, 4);
-  c1->Write();
-
-  TCanvas *c2 = new TCanvas("c2", "FPP", 1200, 1000);
-  c2->Divide(2, 2);
-  c2->cd(1); h_thfpp->Draw();
-  c2->cd(2); h_phfpp->Draw();
-  c2->cd(3); h_zclose->Draw();
-  c2->cd(4); h_sclose->Draw();
-  c2->Write();
-
-
-  TCanvas *c3 = new TCanvas("c3", "FPP", 1200, 1000);
-  c3->Divide(2,2);
-  c3->cd(1); h_phfpp_hp->Draw("E");
-  c3->cd(2); h_phfpp_hm->Draw("E");
-  c3->cd(3); h_phfpp_sum->Draw("E");
-  c3->cd(4); h_phfpp_diff->Draw("E");
-  c3->Write();
-
-  if (jmgr->GetValueFromKey<bool>("save_pdf", true)) {
-    TString pdf = Form("%s_%s.pdf", filebase.c_str(), gepconf.GetLabel().c_str());
-    c1->Print(pdf + "(");
-    c2->Print(pdf);
-    c3->Print(pdf + ")");
-    std::cout << "Plots written to " << pdf << std::endl;
-  }
-
-  fppPhi.Write();
-  fppPhiAll.Write();
-  fout->Write();
+  fout->cd();
+  Tout->Write();
+  fout->Close();
   std::cout << "Output written to " << outFile << std::endl;
 
   sw->Stop();

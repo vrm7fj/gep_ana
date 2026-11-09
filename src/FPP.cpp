@@ -37,4 +37,23 @@ namespace fpp {
     zclose = 0.5 * (c1.Z() + c2.Z());
   }
 
+  bool ConeTest(const Track &in, double zc, double zback, double theta, const std::vector<double> &area)   {
+
+    double x_close = in.x + in.xp * (zc - in.z0);
+    double y_close = in.y + in.yp * (zc - in.z0);
+
+    double xp_scat_plus = TMath::Tan( TMath::ATan(in.xp) + theta);
+    double xp_scat_minus = TMath::Tan( TMath::ATan(in.xp) - theta);
+    double yp_scat_plus = TMath::Tan( TMath::ATan(in.yp) + theta);
+    double yp_scat_minus = TMath::Tan( TMath::ATan(in.yp) - theta);
+
+    double x_max = x_close + xp_scat_plus * (zback - zc);
+    double x_min = x_close + xp_scat_minus * (zback - zc);
+    double y_max = y_close + yp_scat_plus * (zback - zc);
+    double y_min = y_close + yp_scat_minus * (zback - zc);
+
+    return x_min > area[0] && x_max < area[1] && y_min > area[2] && y_max < area[3];
+
+  }
+
 }
