@@ -14,6 +14,7 @@
     "ecal_theta_deg"       : 28.5,
     "ecal_dist"            : 0.0,
     "sbs_bend_angle_deg"   : 0.0,
+    "sbs_opticstheta_deg"  : 0.0,
     "beam_polarization"    : 0.85,
 
     "rootfile_dir"         : "/volatile/halla/sbs/vidura/GEP_REPLAYS/GEP3/LH2/SEMINAR/parsed_rootfiles/",

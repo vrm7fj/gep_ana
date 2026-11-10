@@ -26,6 +26,16 @@
                     active area at fpp_cone_zback (true when use_cone_test is false)
      fppCut         fppNoConeCut && coneCut
 
+   Spin precession (ideal dipole, per event):
+     fp_rx, fp_ry, fp_rth, fp_rph   focal-plane track in the optics frame (sbs.tr.r_*), the
+                                    coordinates SBS-offline's optics expansion uses
+     p_tr           sbs.tr.p
+     thetabend      bend angle, computed as in SBSEArm::CalcTargetCoords() from tg_th, tg_ph,
+                    fp_rth, fp_rph and "sbs_opticstheta_deg" (= sbs.opticstheta in the
+                    SBS-offline DB; 0 when the DB does not set it, as for GEp)
+     chi            gamma * kappa_p * thetabend (rad)
+     Check: p_tr*thetabend reproduces the optics (p*thetabend) term event by event.
+
    Usage (ROOT):
      root -l -b -q 'scripts/gep_elastic_ana.cpp("config/gep5/conf_gep5_5969.json","out/gep5")'
 */
@@ -142,9 +152,12 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   // SBS (proton) track: target and focal-plane variables, needed for spin transport and the cone test
   double ntrack = 0, vz[maxNtr], tgy[maxNtr], tgth[maxNtr], tgph[maxNtr], tgdp[maxNtr];
   double fpx[maxNtr], fpy[maxNtr], fpth[maxNtr], fpph[maxNtr];
+  // optics-frame focal-plane coordinates (what SBS-offline's optics uses) and track momentum:
+  // needed for the bend angle / spin precession. Zero-initialised in case a leaf is missing.
+  double fprx[maxNtr] = {0}, fpry[maxNtr] = {0}, fprth[maxNtr] = {0}, fprph[maxNtr] = {0}, ptr[maxNtr] = {0};
   setrootvar::setbranch(C, "sbs.tr",
-    {"n","vz","tg_y","tg_th","tg_ph","tg_dp","x","y","th","ph"},
-    {&ntrack,&vz,&tgy,&tgth,&tgph,&tgdp,&fpx,&fpy,&fpth,&fpph});
+    {"n","vz","tg_y","tg_th","tg_ph","tg_dp","x","y","th","ph","r_x","r_y","r_th","r_ph","p"},
+    {&ntrack,&vz,&tgy,&tgth,&tgph,&tgdp,&fpx,&fpy,&fpth,&fpph,&fprx,&fpry,&fprth,&fprph,&ptr});
 
   // FPP tracks (angles relative to the front-tracker track, computed in the replay)
   int nfpp = 0;
@@ -170,6 +183,9 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   double ihwp_raw = 0;
   setrootvar::setbranch(C, "IGL1I00OD16_16", "", &ihwp_raw);
 
+  // optics angle of the SBS-offline optics frame (sbs.opticstheta; not set for GEp -> 0)
+  double opticsangle = jmgr->GetValueFromKey<double>("sbs_opticstheta_deg", 0.) * constant::deg2rad;
+
   // ================================================================
   // 3. Output tree
   // ================================================================
@@ -191,6 +207,7 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   double T_vz, T_tgy, T_tgth, T_tgph, T_tgdp, T_fpx, T_fpy, T_fpth, T_fpph;
   double T_eECAL, T_xECAL, T_yECAL, T_xECAL_exp, T_yECAL_exp, T_dx, T_dy;
   double T_thfpp, T_phfpp, T_sclose, T_zclose, T_chi2fpp;
+  double T_fprx, T_fpry, T_fprth, T_fprph, T_ptr, T_thb, T_chi;
   Tout->Branch("run", &T_run, "run/I");
   Tout->Branch("helicity", &T_hel, "helicity/I");             // corrected: raw * sign * IHWP
   Tout->Branch("helicity_raw", &T_hel_raw, "helicity_raw/I");  // as decoded (scalhel.hel)
@@ -215,6 +232,13 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   Tout->Branch("fp_y", &T_fpy, "fp_y/D");
   Tout->Branch("fp_th", &T_fpth, "fp_th/D");
   Tout->Branch("fp_ph", &T_fpph, "fp_ph/D");
+  Tout->Branch("fp_rx", &T_fprx, "fp_rx/D");           // optics frame (sbs.tr.r_*):
+  Tout->Branch("fp_ry", &T_fpry, "fp_ry/D");           // used by SBS-offline's optics
+  Tout->Branch("fp_rth", &T_fprth, "fp_rth/D");
+  Tout->Branch("fp_rph", &T_fprph, "fp_rph/D");
+  Tout->Branch("p_tr", &T_ptr, "p_tr/D");              // sbs.tr.p
+  Tout->Branch("thetabend", &T_thb, "thetabend/D");    // SBS bend angle (rad)
+  Tout->Branch("chi", &T_chi, "chi/D");                // gamma*kappa_p*thetabend (rad)
   Tout->Branch("eECAL", &T_eECAL, "eECAL/D");
   Tout->Branch("xECAL", &T_xECAL, "xECAL/D");
   Tout->Branch("yECAL", &T_yECAL, "yECAL/D");
@@ -331,6 +355,9 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
     T_eprime = hv_eprime; T_the = hv_eth; T_dphi = dphi; T_dt = hv_dt;
     T_vz = vz[0]; T_tgy = tgy[0]; T_tgth = tgth[0]; T_tgph = tgph[0]; T_tgdp = tgdp[0];
     T_fpx = fpx[0]; T_fpy = fpy[0]; T_fpth = fpth[0]; T_fpph = fpph[0];
+    T_fprx = fprx[0]; T_fpry = fpry[0]; T_fprth = fprth[0]; T_fprph = fprph[0]; T_ptr = ptr[0];
+    T_thb = fpp::BendAngle(tgth[0], tgph[0], fprth[0], fprph[0], opticsangle);
+    T_chi = fpp::PrecessionAngle(ptr[0], T_thb);
     T_eECAL = eECAL; T_xECAL = xECAL; T_yECAL = yECAL;
     T_xECAL_exp = xexp; T_yECAL_exp = yexp; T_dx = dx; T_dy = dy;
     T_thfpp = thfpp; T_phfpp = phfpp; T_sclose = sclose; T_zclose = zclose; T_chi2fpp = chi2fpp;

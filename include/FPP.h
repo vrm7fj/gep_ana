@@ -38,6 +38,15 @@ namespace fpp {
 
   // Cone test
   bool ConeTest(const Track &in, double zc, double zback, double thmax, const std::vector<double> &area);
+
+  // SBS bend angle, as in SBS-offline SBSEArm::CalcTargetCoords(): angle between the
+  // target direction (xptar, yptar) and the focal-plane direction in the optics frame
+  // (sbs.tr.r_th, sbs.tr.r_ph), the latter rotated by the optics angle (sbs.opticstheta, rad).
+  // SBS-offline uses p = (p*thetabend)_optics / thetabend with this same angle.
+  double BendAngle(double xptar, double yptar, double xpfp_r, double ypfp_r, double opticsangle);
+
+  // ideal-dipole spin precession angle chi = gamma * kappa_p * thetabend (rad)
+  double PrecessionAngle(double p, double thetabend);
     
 }
 

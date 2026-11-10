@@ -1,6 +1,7 @@
 #include <cmath>
 #include "TMath.h"
 #include "../include/FPP.h"
+#include "../include/Constants.h"
 
 namespace fpp {
 
@@ -55,6 +56,27 @@ namespace fpp {
 
     return x_min > area[0] && x_max < area[1] && y_min > area[2] && y_max < area[3];
 
+  }
+
+  //--------------------------------------------
+  double BendAngle(double xptar, double yptar, double xpfp_r, double ypfp_r, double opticsangle) {
+    // optics axes in the SBS (target transport) frame, as in SBSEArm::InitOpticsAxes()
+    const TVector3 X(std::cos(opticsangle), 0., std::sin(opticsangle));
+    const TVector3 Y(0., 1., 0.);
+    const TVector3 Z(-std::sin(opticsangle), 0., std::cos(opticsangle));
+    TVector3 ntg = TVector3(xptar, yptar, 1.).Unit();
+    TVector3 nfp = TVector3(xpfp_r, ypfp_r, 1.).Unit();
+    TVector3 nfp_sbs = nfp.X() * X + nfp.Y() * Y + nfp.Z() * Z;
+    double c = nfp_sbs.Dot(ntg);
+    if (c > 1.) c = 1.; else if (c < -1.) c = -1.;
+    return std::acos(c);
+  }
+
+  //--------------------------------------------
+  double PrecessionAngle(double p, double thetabend) {
+    if (p <= 0.) return -1.;
+    double gamma = std::sqrt(p * p + constant::Mp * constant::Mp) / constant::Mp;
+    return gamma * constant::kappap * thetabend;
   }
 
 }
