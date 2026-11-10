@@ -1,0 +1,171 @@
+// fig10_azimuthal.C  --  the four panels of Fig. 10 in Punjabi et al., nucl-ex/0501018
+// root -l -b -q 'fig10_azimuthal.C("../out/runs/gep5_*_GEP5.root")'
+//
+//   Y_i^{+-} = N_i^{+-} / (dphi * N_in^{+-} * eta)      Eq. (18)
+//   E_i      = (Y_i^+ + Y_i^-)/2                        Eq. (20)   sum   -> instrumental asymmetry
+//   D_i      = (Y_i^+ - Y_i^-)/2                        Eq. (19)   difference -> Ay*(Pt sin - Pn cos)/2pi
+//   Y_i^{+-}/E_i                                        panel 3   (corrected yields)
+//   A_i      = D_i/E_i = (Y+ - Y-)/(Y+ + Y-)            page 2, fit c1 cos(phi) - s1 sin(phi)
+#include "TChain.h"
+#include "TH1D.h"
+#include "TFile.h"
+#include "TMath.h"
+#include "TCanvas.h"
+#include "TLegend.h"
+#include "TLine.h"
+#include "TStyle.h"
+#include "TF1.h"
+#include "TLatex.h"
+#include <iostream>
+
+void plot_assym(const char *files = "../../out/runs/gep5_*_GEP5.root",
+                     double thmin = 1., double thmax = 10.,   // theta_fpp window (deg); paper used 2.7-50
+                     int nphi = 11, const char *pdf = "fig10.pdf")
+{
+  gStyle->SetOptStat(0);
+  TH1::AddDirectory(kFALSE);
+
+  TChain *T = new TChain("Tout");
+  T->Add(files);
+
+  // --- branches (match the types in your tree: T->Print()) ---
+  double theta_fpp = 0, phi_fpp = 0;
+  int    helicity  = 0;
+  bool   fppCut    = false;            // good FPP scattering (rear track OK)
+  // bool isElastic = false;           // <-- your elastic / good front-track selection
+
+  T->SetBranchStatus("*", 0);
+  T->SetBranchStatus("theta_fpp", 1);  T->SetBranchAddress("theta_fpp", &theta_fpp);
+  T->SetBranchStatus("phi_fpp",   1);  T->SetBranchAddress("phi_fpp",   &phi_fpp);
+  T->SetBranchStatus("helicity",  1);  T->SetBranchAddress("helicity",  &helicity);
+  T->SetBranchStatus("fppCut",    1);  T->SetBranchAddress("fppCut",    &fppCut);
+  // T->SetBranchStatus("isElastic", 1); T->SetBranchAddress("isElastic", &isElastic);
+
+  // --- histograms: raw counts N_i^+ and N_i^- ---
+  TH1D *Np = new TH1D("Np", "", nphi, -TMath::Pi(), TMath::Pi());
+  TH1D *Nm = new TH1D("Nm", "", nphi, -TMath::Pi(), TMath::Pi());
+  Np->Sumw2(); Nm->Sumw2();
+
+  double Nin_p = 0, Nin_m = 0;   // protons incident on the FPP, per helicity
+  double Nscat = 0;              // of those, scattered into thmin < theta < thmax with a good rear track
+
+  // --- event loop ---
+  Long64_t nevent = 0, nentries = T->GetEntries();
+  while (T->GetEntry(nevent++)) {
+    if (nevent % 500000 == 0) std::cout << nevent << " / " << nentries << std::endl;
+
+    if (helicity != 1 && helicity != -1) continue;
+    // if (!isElastic) continue;       // <-- incident-proton selection goes here
+
+    if (helicity > 0) Nin_p++; else Nin_m++;          // N_in^{+-}
+
+    if (!fppCut) continue;
+    double thdeg = theta_fpp * TMath::RadToDeg();
+    if (thdeg < thmin || thdeg >= thmax) continue;
+
+    Nscat++;
+    if (helicity > 0) Np->Fill(phi_fpp); else Nm->Fill(phi_fpp);
+  }
+
+  double eta  = Nscat / (Nin_p + Nin_m);              // eta: scattered / incident
+  double dphi = Np->GetBinWidth(1);
+  std::cout << "N_in+ = " << Nin_p << "  N_in- = " << Nin_m << "  eta = " << eta << std::endl;
+
+  // --- Eq. (18): normalized yields ---
+  TH1D *Yp = (TH1D*)Np->Clone("Yp"); Yp->Scale(1. / (dphi * Nin_p * eta));
+  TH1D *Ym = (TH1D*)Nm->Clone("Ym"); Ym->Scale(1. / (dphi * Nin_m * eta));
+
+  // --- Eq. (20) sum, Eq. (19) difference ---
+  TH1D *E = (TH1D*)Yp->Clone("E"); E->Add(Yp, Ym, 0.5, 0.5);
+  TH1D *D = (TH1D*)Yp->Clone("D"); D->Add(Yp, Ym, 0.5, -0.5);
+
+  // --- panel 3: Y^{+-}/E  (errors treat Y and E as independent: a slight overestimate) ---
+  TH1D *Rp = (TH1D*)Yp->Clone("Rp"); Rp->Divide(E);
+  TH1D *Rm = (TH1D*)Ym->Clone("Rm"); Rm->Divide(E);
+
+  // --- draw: 2x2 panels ---
+  TCanvas *c = new TCanvas("c", "", 1100, 800);
+  c->Divide(2, 2, 0.005, 0.005);
+  auto style = [](TH1D *h, int col, int mk, const char *yt) {
+    h->SetMarkerStyle(mk); h->SetMarkerColor(col); h->SetLineColor(col); h->SetMarkerSize(0.9);
+    h->GetYaxis()->SetTitle(yt); h->GetXaxis()->SetTitle("#varphi_{fpp} (rad)");
+    h->GetYaxis()->SetTitleSize(0.06); h->GetYaxis()->SetLabelSize(0.05); h->GetYaxis()->SetTitleOffset(1.1);
+    h->GetXaxis()->SetTitleSize(0.06); h->GetXaxis()->SetLabelSize(0.05); h->GetXaxis()->SetTitleOffset(1.0);
+    h->GetYaxis()->SetNdivisions(505); h->GetYaxis()->SetMaxDigits(3);
+  };
+  auto margins = []() { gPad->SetLeftMargin(0.16); gPad->SetRightMargin(0.04);
+                        gPad->SetTopMargin(0.05); gPad->SetBottomMargin(0.15); gPad->SetTicks(1, 1); };
+  auto zero = [](double y) { TLine *l = new TLine(-TMath::Pi(), y, TMath::Pi(), y); l->SetLineStyle(2); l->Draw(); };
+
+  // (a) Y+ and Y-
+  c->cd(1); margins();
+  style(Yp, kRed + 1, 20, "Y^{#pm}"); style(Ym, kBlue + 1, 24, "Y^{#pm}");
+  Yp->SetMinimum(0); Yp->SetMaximum(1.3 * std::max(Yp->GetMaximum(), Ym->GetMaximum()));
+  Yp->Draw("E1 X0"); Ym->Draw("E1 X0 SAME");
+  TLegend *lg = new TLegend(0.78, 0.74, 0.95, 0.93); lg->SetBorderSize(0); lg->SetFillStyle(0); lg->SetTextSize(0.06);
+  lg->AddEntry(Yp, "Y^{+}", "p"); lg->AddEntry(Ym, "Y^{-}", "p"); lg->Draw();
+
+  // (b) sum E
+  c->cd(2); margins();
+  style(E, kBlack, 20, "E"); E->SetMinimum(0); E->SetMaximum(1.3 * E->GetMaximum()); E->Draw("E1 X0");
+
+  // (c) Y+-/E
+  c->cd(3); margins();
+  style(Rp, kRed + 1, 20, "Y^{#pm}/E"); style(Rm, kBlue + 1, 24, "Y^{#pm}/E");
+  double rlo = std::min(Rp->GetMinimum(), Rm->GetMinimum()), rhi = std::max(Rp->GetMaximum(), Rm->GetMaximum());
+  double rd = std::max(1. - rlo, rhi - 1.) * 1.4;            // symmetric about 1
+  Rp->SetMinimum(1. - rd); Rp->SetMaximum(1. + rd);
+  Rp->Draw("E1 X0"); Rm->Draw("E1 X0 SAME"); zero(1.);
+
+  // (d) difference D
+  c->cd(4); margins();
+  style(D, kBlack, 20, "D");
+  double dd = std::max(std::fabs(D->GetMinimum()), std::fabs(D->GetMaximum())) * 1.4;   // symmetric about 0
+  D->SetMinimum(-dd); D->SetMaximum(dd);
+  D->Draw("E1 X0"); zero(0.);
+
+  c->Print(TString(pdf) + "(");
+
+  // --- page 2: A = D/E, with correlated errors (D and E share Y+ and Y-) ---
+  //   sigma_A^2 = 4 (Y-^2 sigma_Y+^2 + Y+^2 sigma_Y-^2) / (Y+ + Y-)^4
+  TH1D *A = (TH1D*)D->Clone("A"); A->Reset();
+  for (int i = 1; i <= nphi; i++) {
+    double a = Yp->GetBinContent(i), ea = Yp->GetBinError(i);
+    double b = Ym->GetBinContent(i), eb = Ym->GetBinError(i);
+    if (a + b <= 0) continue;
+    A->SetBinContent(i, (a - b) / (a + b));
+    A->SetBinError(i, 2. * std::sqrt(b * b * ea * ea + a * a * eb * eb) / std::pow(a + b, 2));
+  }
+
+  TF1 *fA = new TF1("fA", "[0]*cos(x) - [1]*sin(x)", -TMath::Pi(), TMath::Pi());
+  fA->SetParNames("c1", "s1"); fA->SetParameters(0., 0.);
+  fA->SetLineColor(kRed + 1); fA->SetLineWidth(2); fA->SetNpx(400);
+  A->Fit(fA, "Q R 0");
+
+  TCanvas *c2 = new TCanvas("c2", "", 1100, 800);
+  c2->SetLeftMargin(0.13); c2->SetRightMargin(0.04); c2->SetTopMargin(0.05); c2->SetBottomMargin(0.13);
+  c2->SetTicks(1, 1);
+  style(A, kBlack, 20, "D/E = (Y^{+} - Y^{-})/(Y^{+} + Y^{-})");
+  A->GetYaxis()->SetTitleSize(0.045); A->GetYaxis()->SetLabelSize(0.04); A->GetYaxis()->SetTitleOffset(1.3);
+  A->GetXaxis()->SetTitleSize(0.05);  A->GetXaxis()->SetLabelSize(0.04);
+  A->SetMarkerSize(1.2); A->GetYaxis()->SetMaxDigits(5);   // plain 0.02, no x10^-3
+  double amax = 0;
+  for (int i = 1; i <= nphi; i++) amax = std::max(amax, std::fabs(A->GetBinContent(i)) + A->GetBinError(i));
+  A->SetMinimum(-1.6 * amax); A->SetMaximum(1.6 * amax);
+  A->Draw("E1 X0"); zero(0.); fA->Draw("SAME"); A->Draw("E1 X0 SAME");
+
+  TLatex t; t.SetNDC(); t.SetTextSize(0.04); t.SetTextAlign(13);
+  t.DrawLatex(0.17, 0.92, Form("c_{1} = %.4f #pm %.4f", fA->GetParameter(0), fA->GetParError(0)));
+  t.DrawLatex(0.17, 0.86, Form("s_{1} = %.4f #pm %.4f", fA->GetParameter(1), fA->GetParError(1)));
+  t.DrawLatex(0.17, 0.80, Form("#chi^{2}/ndf = %.1f/%d", fA->GetChisquare(), fA->GetNDF()));
+  t.DrawLatex(0.55, 0.92, Form("%g^{#circ} < #theta_{fpp} < %g^{#circ}", thmin, thmax));
+  printf("A = c1 cos(phi) - s1 sin(phi):  c1 = %.4f +- %.4f   s1 = %.4f +- %.4f   chi2/ndf = %.1f/%d\n",
+         fA->GetParameter(0), fA->GetParError(0), fA->GetParameter(1), fA->GetParError(1),
+         fA->GetChisquare(), fA->GetNDF());
+
+  c2->Print(TString(pdf) + ")");
+
+  // --- keep the histograms ---
+  TFile fout("fig10.root", "RECREATE");
+  Np->Write(); Nm->Write(); Yp->Write(); Ym->Write(); E->Write(); D->Write(); Rp->Write(); Rm->Write(); A->Write();
+}

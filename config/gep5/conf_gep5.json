@@ -50,7 +50,7 @@
     "theta_fpp_bins_deg"   : [2, 3, 4, 5, 6, 7, 8, 9],
     "n_phi_bins"           : 12,
 
-    "helicity_sign"        : 1,
+    "helicity_sign"        : -1,
     "helicity_sign_by_run" : {},
     "ihwp_file"            : "ihwp.json",
 
