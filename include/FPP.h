@@ -47,6 +47,14 @@ namespace fpp {
 
   // ideal-dipole spin precession angle chi = gamma * kappa_p * thetabend (rad)
   double PrecessionAngle(double p, double thetabend);
+
+  // The bend split by plane, in the SBS (target transport) frame, both signed (rad):
+  //   dth = dispersive bend     = atan(x'_fp) - atan(x'_tg)   (rotation about the horizontal y axis)
+  //   dph = non-dispersive bend = atan(y'_fp) - atan(y'_tg)   (rotation about the vertical x axis)
+  // with the focal-plane slopes first rotated by the optics angle into the SBS frame.
+  // thetabend (3D angle) ~ sqrt(dth^2 + dph^2).
+  void BendComponents(double xptar, double yptar, double xpfp_r, double ypfp_r, double opticsangle,
+                      double &dth, double &dph);
     
 }
 

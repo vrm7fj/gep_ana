@@ -34,6 +34,10 @@
                     fp_rth, fp_rph and "sbs_opticstheta_deg" (= sbs.opticstheta in the
                     SBS-offline DB; 0 when the DB does not set it, as for GEp)
      chi            gamma * kappa_p * thetabend (rad)
+     dthbend        dispersive (vertical) bend, atan(x'_fp) - atan(x'_tg), signed (rad)
+     dphbend        non-dispersive (horizontal) bend, atan(y'_fp) - atan(y'_tg), signed (rad)
+     chi_th, chi_ph gamma * kappa_p * dthbend, gamma * kappa_p * dphbend: precession about the
+                    horizontal and vertical axes (two-rotation approximation), signed (rad)
      Check: p_tr*thetabend reproduces the optics (p*thetabend) term event by event.
 
    Usage (ROOT):
@@ -208,6 +212,7 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   double T_eECAL, T_xECAL, T_yECAL, T_xECAL_exp, T_yECAL_exp, T_dx, T_dy;
   double T_thfpp, T_phfpp, T_sclose, T_zclose, T_chi2fpp;
   double T_fprx, T_fpry, T_fprth, T_fprph, T_ptr, T_thb, T_chi;
+  double T_dthb, T_dphb, T_chith, T_chiph;
   Tout->Branch("run", &T_run, "run/I");
   Tout->Branch("helicity", &T_hel, "helicity/I");             // corrected: raw * sign * IHWP
   Tout->Branch("helicity_raw", &T_hel_raw, "helicity_raw/I");  // as decoded (scalhel.hel)
@@ -239,6 +244,10 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
   Tout->Branch("p_tr", &T_ptr, "p_tr/D");              // sbs.tr.p
   Tout->Branch("thetabend", &T_thb, "thetabend/D");    // SBS bend angle (rad)
   Tout->Branch("chi", &T_chi, "chi/D");                // gamma*kappa_p*thetabend (rad)
+  Tout->Branch("dthbend", &T_dthb, "dthbend/D");       // dispersive bend, signed (rad)
+  Tout->Branch("dphbend", &T_dphb, "dphbend/D");       // non-dispersive bend, signed (rad)
+  Tout->Branch("chi_th", &T_chith, "chi_th/D");        // gamma*kappa_p*dthbend (rad)
+  Tout->Branch("chi_ph", &T_chiph, "chi_ph/D");        // gamma*kappa_p*dphbend (rad)
   Tout->Branch("eECAL", &T_eECAL, "eECAL/D");
   Tout->Branch("xECAL", &T_xECAL, "xECAL/D");
   Tout->Branch("yECAL", &T_yECAL, "yECAL/D");
@@ -358,6 +367,10 @@ int gep_elastic_ana(const char *configfilename, std::string filebase = "../gep_o
     T_fprx = fprx[0]; T_fpry = fpry[0]; T_fprth = fprth[0]; T_fprph = fprph[0]; T_ptr = ptr[0];
     T_thb = fpp::BendAngle(tgth[0], tgph[0], fprth[0], fprph[0], opticsangle);
     T_chi = fpp::PrecessionAngle(ptr[0], T_thb);
+    fpp::BendComponents(tgth[0], tgph[0], fprth[0], fprph[0], opticsangle, T_dthb, T_dphb);
+    double gk = (ptr[0] > 0.) ? std::sqrt(ptr[0]*ptr[0] + constant::Mp*constant::Mp) / constant::Mp * constant::kappap : 0.;
+    T_chith = gk * T_dthb;                               // 0 if p is not valid
+    T_chiph = gk * T_dphb;
     T_eECAL = eECAL; T_xECAL = xECAL; T_yECAL = yECAL;
     T_xECAL_exp = xexp; T_yECAL_exp = yexp; T_dx = dx; T_dy = dy;
     T_thfpp = thfpp; T_phfpp = phfpp; T_sclose = sclose; T_zclose = zclose; T_chi2fpp = chi2fpp;

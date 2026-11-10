@@ -59,17 +59,29 @@ namespace fpp {
   }
 
   //--------------------------------------------
-  double BendAngle(double xptar, double yptar, double xpfp_r, double ypfp_r, double opticsangle) {
-    // optics axes in the SBS (target transport) frame, as in SBSEArm::InitOpticsAxes()
+  // focal-plane direction (optics-frame slopes) expressed in the SBS frame, as in SBSEArm::InitOpticsAxes()
+  static TVector3 FpDirSBS(double xpfp_r, double ypfp_r, double opticsangle) {
     const TVector3 X(std::cos(opticsangle), 0., std::sin(opticsangle));
     const TVector3 Y(0., 1., 0.);
     const TVector3 Z(-std::sin(opticsangle), 0., std::cos(opticsangle));
+    TVector3 n = TVector3(xpfp_r, ypfp_r, 1.).Unit();
+    return n.X() * X + n.Y() * Y + n.Z() * Z;
+  }
+
+  //--------------------------------------------
+  double BendAngle(double xptar, double yptar, double xpfp_r, double ypfp_r, double opticsangle) {
     TVector3 ntg = TVector3(xptar, yptar, 1.).Unit();
-    TVector3 nfp = TVector3(xpfp_r, ypfp_r, 1.).Unit();
-    TVector3 nfp_sbs = nfp.X() * X + nfp.Y() * Y + nfp.Z() * Z;
-    double c = nfp_sbs.Dot(ntg);
+    double c = FpDirSBS(xpfp_r, ypfp_r, opticsangle).Dot(ntg);
     if (c > 1.) c = 1.; else if (c < -1.) c = -1.;
     return std::acos(c);
+  }
+
+  //--------------------------------------------
+  void BendComponents(double xptar, double yptar, double xpfp_r, double ypfp_r, double opticsangle,
+                      double &dth, double &dph) {
+    TVector3 nfp = FpDirSBS(xpfp_r, ypfp_r, opticsangle);
+    dth = std::atan2(nfp.X(), nfp.Z()) - std::atan(xptar);   // dispersive (vertical) plane
+    dph = std::atan2(nfp.Y(), nfp.Z()) - std::atan(yptar);   // non-dispersive (horizontal) plane
   }
 
   //--------------------------------------------
